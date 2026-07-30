@@ -55,7 +55,7 @@
         .hud-value { color: var(--text-main); }
 
         .controls { display: flex; justify-content: flex-start; gap: 12px; margin-bottom: 20px; }
-        
+
         button {
             background-color: var(--accent-blue);
             color: white;
@@ -94,26 +94,23 @@
         }
         .analytics-card.success { background: #064e3b; border: 1px solid var(--accent-green); }
         .analytics-card.failed { background: #4c1d1d; border: 1px solid var(--accent-red); }
-        
+
         @keyframes slideIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
     </style>
-
-    <!-- FIXED URL: Corrected endpoint mapping to the official open-source cdnjs delivery pool -->
-    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="dashboard-container">
         <h1>Spatial QA Verification Engine</h1>
         <p>A decentralized, client-side Computer Vision pipeline designed for operational motion mapping verification loops.</p>
-        
+
         <div class="system-hud">
             <div class="hud-item"><span class="hud-label">ENGINE_STATE:</span> <span id="hudState" class="hud-value" style="color:var(--accent-red);">INITIALIZING</span></div>
             <div class="hud-item"><span class="hud-label">TELEMETRY:</span> <span id="hudTelemetry" class="hud-value">N/A</span></div>
         </div>
-        
+
         <div class="controls">
             <button id="btnPrimary" disabled>Awaiting Framework...</button>
             <button id="btnAbort" class="abort" style="display: none;">Abort Routine</button>
@@ -127,14 +124,15 @@
         <div id="analyticsCard" class="analytics-card"></div>
     </div>
 
-    <script>
-        const HandLandmarker = mp.tasks.vision.HandLandmarker;
-        const FilesetResolver = mp.tasks.vision.FilesetResolver;
+    <script type="module">
+        import {
+            HandLandmarker,
+            FilesetResolver
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
         const video = document.getElementById("webcam");
         const canvas = document.getElementById("output_canvas");
         const ctx = canvas.getContext("2d");
-        const hud = document.getElementById("hud");
         const btnPrimary = document.getElementById("btnPrimary");
         const btnAbort = document.getElementById("btnAbort");
         const videoContainer = document.getElementById("viewportWrapper");
@@ -145,7 +143,7 @@
             REQUIRED_HOLD_FRAMES: 6,
             TIMEOUT_LIMIT_SEC: 60,
             CAMERA_PROFILES: { width: 640, height: 480, facingMode: "user" },
-            LOCAL_MODEL_PATH: "hand_landmarker.task"
+            MODEL_ASSET_PATH: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
         };
 
         const EngineStates = {
@@ -210,24 +208,45 @@
             }
 
             async bootstrap() {
+                if (location.protocol === "file:") {
+                    this.dom.hudState.innerText = "CORS_ERROR";
+                    this.dom.hudTelemetry.innerText = "PLEASE USE HTTP SERVER";
+                    console.error("Local file:// protocol detected. MediaPipe tasks require a web server.");
+                    alert("Please serve this file using a local web server (e.g. `python -m http.server`). File protocol is blocked by CORS.");
+                    return;
+                }
+
                 try {
-                    // FIXED INTERNALS: Points securely to Cloudflare's verified CDN path map
                     const vision = await FilesetResolver.forVisionTasks(
-                        "https://cloudflare.com"
+                        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
                     );
-                    
-                    this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { 
-                            modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, 
-                            delegate: "GPU" 
-                        },
-                        runningMode: "VIDEO",
-                        numHands: 1
-                    });
+
+                    // Try GPU initialization first, fallback to CPU if unavailable
+                    try {
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                            baseOptions: {
+                                modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
+                                delegate: "GPU"
+                            },
+                            runningMode: "VIDEO",
+                            numHands: 1
+                        });
+                    } catch (gpuError) {
+                        console.warn("GPU Acceleration failed, falling back to CPU:", gpuError);
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                            baseOptions: {
+                                modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
+                                delegate: "CPU"
+                            },
+                            runningMode: "VIDEO",
+                            numHands: 1
+                        });
+                    }
+
                     this.transitionState(EngineStates.READY);
                 } catch (error) {
                     this.dom.hudState.innerText = "CRITICAL_ERROR";
-                    this.dom.hudTelemetry.innerText = "IO_EXCEPTION / FAULT";
+                    this.dom.hudTelemetry.innerText = "BOOTSTRAP_FAILED";
                     console.error("Bootstrap Fatal Loop: ", error);
                 }
             }
@@ -236,176 +255,202 @@
                 this.state = newState;
                 this.dom.hudState.innerText = newState;
 
-                switch(newState) {
+                switch (newState) {
                     case EngineStates.READY:
                         this.dom.hudState.style.color = "var(--accent-blue)";
                         this.dom.btnPrimary.disabled = false;
-                    this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
-                    break;
-                case EngineStates.CALIBRATE_P1:
-                    this.dom.btnPrimary.innerText = "Commit Vector Location 1";
-                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
-                    break;
-                case EngineStates.CALIBRATE_P2:
-                    this.dom.btnPrimary.innerText = "Commit Vector Location 2";
-                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
-                    break;
-                case EngineStates.TEST_P1:
-                    this.dom.btnPrimary.style.display = "none";
-                    this.dom.btnAbort.style.display = "inline-block";
-                    break;
+                        this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
+                        break;
+                    case EngineStates.CALIBRATE_P1:
+                        this.dom.btnPrimary.innerText = "Commit Vector Location 1";
+                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
+                        break;
+                    case EngineStates.CALIBRATE_P2:
+                        this.dom.btnPrimary.innerText = "Commit Vector Location 2";
+                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
+                        break;
+                    case EngineStates.TEST_P1:
+                        this.dom.btnPrimary.style.display = "none";
+                        this.dom.btnAbort.style.display = "inline-block";
+                        break;
+                }
             }
-        }
 
-        async handlePrimaryAction() {
-            this.audio.init();
-            if (this.state === EngineStates.READY) {
-                this.savedPositions = [];
-                this.dom.analytics.style.display = "none";
-                this.transitionState(EngineStates.CALIBRATE_P1);
-                this.dom.viewport.style.display = "block";
-                await this.initHardwareStream();
-            } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
-                this.audio.beepCheckpoint();
-                this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#3b82f6" });
-                this.transitionState(EngineStates.CALIBRATE_P2);
-            } else if (this.state === EngineStates.CALIBRATE_P2 && this.fingerX !== null) {
-                this.audio.beepCheckpoint();
-                this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#eab308" });
-                this.holdCounter = 0;
-                this.startTime = Date.now();
-                this.transitionState(EngineStates.TEST_P1);
-                this.startChronoLoop();
+            async handlePrimaryAction() {
+                this.audio.init();
+                if (this.state === EngineStates.READY) {
+                    this.savedPositions = [];
+                    this.dom.analytics.style.display = "none";
+                    this.transitionState(EngineStates.CALIBRATE_P1);
+                    this.dom.viewport.style.display = "block";
+                    await this.initHardwareStream();
+                } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
+                    this.audio.beepCheckpoint();
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#3b82f6" });
+                    this.transitionState(EngineStates.CALIBRATE_P2);
+                } else if (this.state === EngineStates.CALIBRATE_P2 && this.fingerX !== null) {
+                    this.audio.beepCheckpoint();
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#eab308" });
+                    this.holdCounter = 0;
+                    this.startTime = Date.now();
+                    this.transitionState(EngineStates.TEST_P1);
+                    this.startChronoLoop();
+                }
             }
-        }
 
-        async initHardwareStream() {
-            try {
-                this.streamRef = await navigator.mediaDevices.getUserMedia({ video: EngineConfig.CAMERA_PROFILES });
-                this.dom.video.srcObject = this.streamRef;
-                this.dom.video.addEventListener("loadeddata", () => {
-                    window.requestAnimationFrame(() => this.processPipelineFrame());
-                });
-            } catch (err) {
-                this.dom.hudTelemetry.innerText = "HARDWARE_ACCESS_DENIED";
-                this.terminatePipeline(false, "PERMISSIONS_EXCEPTION");
+            async initHardwareStream() {
+                try {
+                    this.streamRef = await navigator.mediaDevices.getUserMedia({ video: EngineConfig.CAMERA_PROFILES });
+                    this.dom.video.srcObject = this.streamRef;
+                    this.dom.video.addEventListener("loadeddata", () => {
+                        window.requestAnimationFrame(() => this.processPipelineFrame());
+                    });
+                } catch (err) {
+                    this.dom.hudTelemetry.innerText = "HARDWARE_ACCESS_DENIED";
+                    this.terminatePipeline(false, "PERMISSIONS_EXCEPTION");
+                }
             }
-        }
 
-        startChronoLoop() {
-            this.timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - this.startTime) / 1000;
-                const remaining = Math.max(0, Math.ceil(EngineConfig.TIMEOUT_LIMIT_SEC - elapsed));
+            startChronoLoop() {
+                this.timerInterval = setInterval(() => {
+                    const elapsed = (Date.now() - this.startTime) / 1000;
+                    const remaining = Math.max(0, Math.ceil(EngineConfig.TIMEOUT_LIMIT_SEC - elapsed));
+
+                    if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
+                        this.dom.hudTelemetry.innerText = `TIMEOUT IN: ${remaining}s`;
+                    }
+                    if (remaining <= 0) this.terminatePipeline(false, "TIMEOUT_EXCEPTION");
+                }, 200);
+            }
+
+            processPipelineFrame() {
+                if (this.state === EngineStates.READY || !this.dom.video.videoWidth) return;
                 
-                if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
-                    this.dom.hudTelemetry.innerText = `TIMEOUT IN: ${remaining}s`;
-                }
-                if (remaining <= 0) this.terminatePipeline(false, "TIMEOUT_EXCEPTION");
-            }, 200);
-        }
+                if (this.dom.video.currentTime !== this.lastVideoTime) {
+                    this.lastVideoTime = this.dom.video.currentTime;
 
-        processPipelineFrame() {
-            if (this.state === EngineStates.READY || !this.dom.video.videoWidth) return;
-            if (this.dom.video.currentTime === this.lastVideoTime) {
-                window.requestAnimationFrame(() => this.processPipelineFrame());
-                return;
-            }
-            this.lastVideoTime = this.dom.video.currentTime;
+                    this.dom.canvas.width = this.dom.video.videoWidth;
+                    this.dom.canvas.height = this.dom.video.videoHeight;
+                    this.dom.ctx.clearRect(0, 0, this.dom.canvas.width, this.dom.canvas.height);
 
-            this.dom.canvas.width = this.dom.video.videoWidth;
-            this.dom.canvas.height = this.dom.video.videoHeight;
-            this.dom.ctx.clearRect(0, 0, this.dom.canvas.width, this.dom.canvas.height);
+                    const detections = this.handLandmarker.detectForVideo(this.dom.video, performance.now());
+                    this.fingerX = null;
+                    this.fingerY = null;
 
-            const detections = this.handLandmarker.detectForVideo(this.dom.video, performance.now());
-            this.fingerX = null; 
-            this.fingerY = null;
+                    if (detections.handLandmarks && detections.handLandmarks.length > 0) {
+                        const firstHand = detections.handLandmarks[0];
 
-            if (detections.handLandmarks && detections.handLandmarks.length > 0) {
-                const firstHand = detections.handLandmarks[0];
-                if (firstHand && firstHand.length > 8) {
-                    const indexTip = firstHand[8];
-                    this.fingerX = indexTip.x;
-                    this.fingerY = indexTip.y;
+                        // Render hand skeletal joint connections
+                        this.dom.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+                        this.dom.ctx.lineWidth = 2;
+                        const connections = [
+                            [0,1],[1,2],[2,3],[3,4],
+                            [0,5],[5,6],[6,7],[7,8],
+                            [5,9],[9,10],[10,11],[11,12],
+                            [9,13],[13,14],[14,15],[15,16],
+                            [13,17],[17,18],[18,19],[19,20],[0,17]
+                        ];
+                        connections.forEach(([i, j]) => {
+                            this.dom.ctx.beginPath();
+                            this.dom.ctx.moveTo(firstHand[i].x * this.dom.canvas.width, firstHand[i].y * this.dom.canvas.height);
+                            this.dom.ctx.lineTo(firstHand[j].x * this.dom.canvas.width, firstHand[j].y * this.dom.canvas.height);
+                            this.dom.ctx.stroke();
+                        });
 
-                    this.dom.ctx.beginPath();
-                    this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 8, 0, 2 * Math.PI);
-                    this.dom.ctx.fillStyle = "var(--accent-green)";
-                    this.dom.ctx.fill();
-                }
-            }
+                        // Locate Index Tip Landmark (ID 8)
+                        if (firstHand.length > 8) {
+                            const indexTip = firstHand[8];
+                            this.fingerX = indexTip.x;
+                            this.fingerY = indexTip.y;
 
-            this.savedPositions.forEach((pos) => {
-                this.dom.ctx.beginPath();
-                this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
-                this.dom.ctx.lineWidth = 4;
-                this.dom.ctx.strokeStyle = pos.color;
-                this.dom.ctx.stroke();
-            });
+                            // Draw Green Pointer Dot
+                            this.dom.ctx.beginPath();
+                            this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 10, 0, 2 * Math.PI);
+                            this.dom.ctx.fillStyle = "#10b981";
+                            this.dom.ctx.fill();
+                            this.dom.ctx.strokeStyle = "#ffffff";
+                            this.dom.ctx.lineWidth = 2;
+                            this.dom.ctx.stroke();
+                        }
+                    }
 
-            if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
-                const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
-                const target = this.savedPositions[activeIdx];
+                    // Render saved calibration targets
+                    this.savedPositions.forEach((pos) => {
+                        this.dom.ctx.beginPath();
+                        this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
+                        this.dom.ctx.lineWidth = 4;
+                        this.dom.ctx.strokeStyle = pos.color;
+                        this.dom.ctx.stroke();
+                    });
 
-                this.dom.ctx.beginPath();
-                this.dom.ctx.arc(target.x * this.dom.canvas.width, target.y * this.dom.canvas.height, 35, 0, 2 * Math.PI);
-                this.dom.ctx.lineWidth = 2;
-                this.dom.ctx.strokeStyle = "var(--accent-red)";
-                this.dom.ctx.stroke();
+                    // Manage tracking & verification collision targets
+                    if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
+                        const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
+                        const target = this.savedPositions[activeIdx];
 
-                if (this.fingerX !== null) {
-                    const deltaDist = Math.sqrt(Math.pow(this.fingerX - target.x, 2) + Math.pow(this.fingerY - target.y, 2));
-                    if (deltaDist < EngineConfig.THRESHOLD_DISTANCE) {
-                        this.holdCounter++;
-                        if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
-                            this.holdCounter = 0;
-                            if (this.state === EngineStates.TEST_P1) {
-                                this.audio.beepCheckpoint();
-                                this.transitionState(EngineStates.TEST_P2);
+                        this.dom.ctx.beginPath();
+                        this.dom.ctx.arc(target.x * this.dom.canvas.width, target.y * this.dom.canvas.height, 35, 0, 2 * Math.PI);
+                        this.dom.ctx.lineWidth = 2;
+                        this.dom.ctx.strokeStyle = "#ef4444";
+                        this.dom.ctx.stroke();
+
+                        if (this.fingerX !== null) {
+                            const deltaDist = Math.sqrt(Math.pow(this.fingerX - target.x, 2) + Math.pow(this.fingerY - target.y, 2));
+                            if (deltaDist < EngineConfig.THRESHOLD_DISTANCE) {
+                                this.holdCounter++;
+                                if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
+                                    this.holdCounter = 0;
+                                    if (this.state === EngineStates.TEST_P1) {
+                                        this.audio.beepCheckpoint();
+                                        this.transitionState(EngineStates.TEST_P2);
+                                    } else {
+                                        this.terminatePipeline(true, "SUCCESS_MET");
+                                        return;
+                                    }
+                                }
                             } else {
-                                this.terminatePipeline(true, "SUCCESS_MET");
-                                return;
+                                this.holdCounter = Math.max(0, this.holdCounter - 1);
                             }
                         }
-                    } else {
-                        this.holdCounter = Math.max(0, this.holdCounter - 1);
+                        this.dom.ctx.fillStyle = "#ffffff";
+                        this.dom.ctx.font = "14px monospace";
+                        this.dom.ctx.fillText(`BUFFER_STABILITY: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 20, this.dom.canvas.height - 20);
                     }
                 }
-                this.dom.ctx.fillStyle = "#ffffff";
-                this.dom.ctx.font = "14px monospace";
-                this.dom.ctx.fillText(`BUFFER_STABILITY: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 20, this.dom.canvas.height - 20);
+
+                window.requestAnimationFrame(() => this.processPipelineFrame());
             }
 
-            window.requestAnimationFrame(() => this.processPipelineFrame());
-        }
+            terminatePipeline(isSuccess, terminationStatusSymbol) {
+                clearInterval(this.timerInterval);
+                if (this.streamRef) this.streamRef.getTracks().forEach(track => track.stop());
 
-        terminatePipeline(isSuccess, terminationStatusSymbol) {
-            clearInterval(this.timerInterval);
-            if (this.streamRef) this.streamRef.getTracks().forEach(track => track.stop());
+                this.dom.viewport.style.display = "none";
+                this.dom.btnAbort.style.display = "none";
+                this.dom.btnPrimary.style.display = "inline-block";
 
-            this.dom.viewport.style.display = "none";
-            this.dom.btnAbort.style.display = "none";
-            this.dom.btnPrimary.style.display = "inline-block";
-            
-            this.transitionState(EngineStates.READY);
-            this.dom.hudTelemetry.innerText = terminationStatusSymbol;
-            this.dom.analytics.style.display = "block";
+                this.transitionState(EngineStates.READY);
+                this.dom.hudTelemetry.innerText = terminationStatusSymbol;
+                this.dom.analytics.style.display = "block";
 
-            if (isSuccess) {
-                this.audio.beepSuccess();
-                const duration = (Date.now() - this.startTime) / 1000;
-                this.dom.analytics.className = "analytics-card success";
-                this.dom.analytics.innerHTML = `<strong>🟢 TRANSACTION_SUCCESS</strong><br>Verification completed in: ${duration.toFixed(2)}s`;
-            } else {
-                this.audio.beepFailure();
-                this.dom.analytics.className = "analytics-card failed";
-                this.dom.analytics.innerHTML = `<strong>🔴 TRANSACTION_FAILED</strong><br>Termination Code: ${terminationStatusSymbol}`;
+                if (isSuccess) {
+                    this.audio.beepSuccess();
+                    const duration = (Date.now() - this.startTime) / 1000;
+                    this.dom.analytics.className = "analytics-card success";
+                    this.dom.analytics.innerHTML = `<strong>\u{1F7E2} TRANSACTION_SUCCESS</strong><br>Verification completed in: ${duration.toFixed(2)}s`;
+                } else {
+                    this.audio.beepFailure();
+                    this.dom.analytics.className = "analytics-card failed";
+                    this.dom.analytics.innerHTML = `<strong>\u{1F534} TRANSACTION_FAILED</strong><br>Termination Code: ${terminationStatusSymbol}`;
+                }
             }
         }
-    }
 
-    document.addEventListener("DOMContentLoaded", () => {
-        const context = new ApplicationContext();
-        context.bootstrap();
-    });
-
+        document.addEventListener("DOMContentLoaded", () => {
+            const context = new ApplicationContext();
+            context.bootstrap();
+        });
+    </script>
+</body>
+</html>
 
