@@ -101,7 +101,7 @@
         }
     </style>
 
-    <!-- FIXED: Loading the primary script from unpkg framework CDN instead of jsDelivr -->
+    <!-- FIXED: Pulling the core script bundle from a reliable unpkg version pathway -->
     <script src="https://unpkg.com" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -128,6 +128,19 @@
     </div>
 
     <script>
+        // Mapping global classes cleanly from the unpkg bundle file
+        const HandLandmarker = mp.tasks.vision.HandLandmarker;
+        const FilesetResolver = mp.tasks.vision.FilesetResolver;
+
+        const video = document.getElementById("webcam");
+        const canvas = document.getElementById("output_canvas");
+        const ctx = canvas.getContext("2d");
+        const hud = document.getElementById("hud");
+        const btnPrimary = document.getElementById("btnPrimary");
+        const btnAbort = document.getElementById("btnAbort");
+        const videoContainer = document.getElementById("viewportWrapper");
+        const analytics = document.getElementById("analyticsCard");
+
         const EngineConfig = {
             THRESHOLD_DISTANCE: 0.15,
             REQUIRED_HOLD_FRAMES: 6,
@@ -184,13 +197,13 @@
                 this.dom = {
                     hudState: document.getElementById("hudState"),
                     hudTelemetry: document.getElementById("hudTelemetry"),
-                    btnPrimary: document.getElementById("btnPrimary"),
-                    btnAbort: document.getElementById("btnAbort"),
-                    viewport: document.getElementById("viewportWrapper"),
-                    video: document.getElementById("webcam"),
-                    canvas: document.getElementById("output_canvas"),
-                    ctx: document.getElementById("output_canvas").getContext("2d"),
-                    analytics: document.getElementById("analyticsCard")
+                    btnPrimary: btnPrimary,
+                    btnAbort: btnAbort,
+                    viewport: videoContainer,
+                    video: video,
+                    canvas: canvas,
+                    ctx: ctx,
+                    analytics: analytics
                 };
 
                 this.dom.btnPrimary.addEventListener("click", () => this.handlePrimaryAction());
@@ -199,12 +212,17 @@
 
             async bootstrap() {
                 try {
-                    // FIXED: Shifted internal WASM parsing logic directory reference cleanly from jsDelivr to unpkg
-                    const vision = await mp.tasks.vision.FilesetResolver.forVisionTasks(
+                    // FIXED: Matching unpkg path definition structure for internal WebAssembly resolution
+                    const vision = await FilesetResolver.forVisionTasks(
                         "https://unpkg.com"
                     );
-                    this.handLandmarker = await mp.tasks.vision.HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, delegate: "GPU" },
+                    
+                    this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                        baseOptions: { 
+                            // Reading your local repo's hand_landmarker.task file asset
+                            modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, 
+                            delegate: "GPU" 
+                        },
                         runningMode: "VIDEO",
                         numHands: 1
                     });
@@ -222,15 +240,16 @@
 
                 switch(newState) {
                     case EngineStates.READY:
-                        this.dom.hudState.style.color = "var(--accent-blue)";
-                        this.dom.btnPrimary.disabled = false;
-                        this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
-                        break;
-                    case EngineStates.CALIBRATE_P1:
-                        this.dom.btnPrimary.innerText = "Commit Vector Location 1";
-                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
-                        break;
-                    case EngineStates.CALIBRATE_P2:
+                    this.dom.hudState.style.color = "var(--accent-blue)";
+                    this.dom.btnPrimary.disabled = false;
+                    this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
+                    break;
+                case EngineStates.CALIBRATE_P1:
+                    this.dom.btnPrimary.innerText = "Commit Vector Location 1";
+                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
+                    break;
+                case EngineStates.CALIBRATE_P2:
+                    this.dom.btnPrimary.innerText = "Commit Vector Location 2";
                     this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
                     break;
                 case EngineStates.TEST_P1:
@@ -304,10 +323,11 @@
             this.fingerY = null;
 
             if (detections.handLandmarks && detections.handLandmarks.length > 0) {
-                const trackingNodes = detections.handLandmarks[0];
-                if (trackingNodes && trackingNodes.length > 8) {
-                    this.fingerX = trackingNodes[8].x;
-                    this.fingerY = trackingNodes[8].y;
+                const firstHand = detections.handLandmarks[0];
+                if (firstHand && firstHand.length > 8) {
+                    const indexTip = firstHand[8]; 
+                    this.fingerX = indexTip.x;
+                    this.fingerY = indexTip.y;
 
                     this.dom.ctx.beginPath();
                     this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 8, 0, 2 * Math.PI);
@@ -389,4 +409,5 @@
         const context = new ApplicationContext();
         context.bootstrap();
     });
+
 
