@@ -138,10 +138,11 @@
         const videoContainer = document.getElementById("viewportWrapper");
         const analytics = document.getElementById("analyticsCard");
 
+        // Exactly aligned parameters matching your Python scripts
         const EngineConfig = {
-            THRESHOLD_DISTANCE: 0.15,
-            REQUIRED_HOLD_FRAMES: 6,
-            TIMEOUT_LIMIT_SEC: 60,
+            THRESHOLD_DISTANCE: 0.08,     // Matches DISTANCE_THRESHOLD = 0.08
+            REQUIRED_HOLD_FRAMES: 15,    // Matches REQUIRED_HOLD_FRAMES = 15
+            TIMEOUT_LIMIT_SEC: 60,       // Matches TOTAL_ALLOWED_TIME = 60
             CAMERA_PROFILES: { width: 640, height: 480, facingMode: "user" },
             MODEL_ASSET_PATH: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
         };
@@ -211,8 +212,7 @@
                 if (location.protocol === "file:") {
                     this.dom.hudState.innerText = "CORS_ERROR";
                     this.dom.hudTelemetry.innerText = "PLEASE USE HTTP SERVER";
-                    console.error("Local file:// protocol detected. MediaPipe tasks require a web server.");
-                    alert("Please serve this file using a local web server (e.g. `python -m http.server`) or host via GitHub Pages.");
+                    alert("MediaPipe requires an HTTP server (e.g., GitHub Pages or Python http.server).");
                     return;
                 }
 
@@ -228,15 +228,13 @@
                         },
                         runningMode: "VIDEO",
                         numHands: 1,
-                        minHandDetectionConfidence: 0.3,
-                        minHandPresenceConfidence: 0.3,
-                        minTrackingConfidence: 0.3
+                        minHandDetectionConfidence: 0.7
                     };
 
                     try {
                         this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
-                    } catch (gpuError) {
-                        console.warn("GPU Acceleration failed, falling back to CPU:", gpuError);
+                    } catch (gpuErr) {
+                        console.warn("GPU failed, falling back to CPU execution:", gpuErr);
                         options.baseOptions.delegate = "CPU";
                         this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
                     }
@@ -257,15 +255,15 @@
                     case EngineStates.READY:
                         this.dom.hudState.style.color = "var(--accent-blue)";
                         this.dom.btnPrimary.disabled = false;
-                        this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
+                        this.dom.btnPrimary.innerText = "Initialize Calibration Sequence";
                         break;
                     case EngineStates.CALIBRATE_P1:
-                        this.dom.btnPrimary.innerText = "Commit Vector Location 1";
-                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
+                        this.dom.btnPrimary.innerText = "Save Position 1";
+                        this.dom.hudTelemetry.innerText = "Setup Position 1. Click button to save.";
                         break;
                     case EngineStates.CALIBRATE_P2:
-                        this.dom.btnPrimary.innerText = "Commit Vector Location 2";
-                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
+                        this.dom.btnPrimary.innerText = "Save Position 2";
+                        this.dom.hudTelemetry.innerText = "Setup Position 2. Click button to save.";
                         break;
                     case EngineStates.TEST_P1:
                         this.dom.btnPrimary.style.display = "none";
@@ -284,11 +282,13 @@
                     await this.initHardwareStream();
                 } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
                     this.audio.beepCheckpoint();
-                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#3b82f6" });
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
+                    console.log("→ Position 1 Saved!", { x: this.fingerX, y: this.fingerY });
                     this.transitionState(EngineStates.CALIBRATE_P2);
                 } else if (this.state === EngineStates.CALIBRATE_P2 && this.fingerX !== null) {
                     this.audio.beepCheckpoint();
-                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#eab308" });
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
+                    console.log("→ Position 2 Saved!", { x: this.fingerX, y: this.fingerY });
                     this.holdCounter = 0;
                     this.startTime = Date.now();
                     this.transitionState(EngineStates.TEST_P1);
@@ -329,41 +329,29 @@
 
                     this.dom.canvas.width = this.dom.video.videoWidth;
                     this.dom.canvas.height = this.dom.video.videoHeight;
-                    this.dom.ctx.clearRect(0, 0, this.dom.canvas.width, this.dom.canvas.height);
+                    const w = this.dom.canvas.width;
+                    const h = this.dom.canvas.height;
+                    this.dom.ctx.clearRect(0, 0, w, h);
 
-                    const detections = this.handLandmarker.detectForVideo(this.dom.video, performance.now());
+                    // Ensure timestamp is strictly increasing
+                    const timestamp = performance.now();
+                    const detections = this.handLandmarker.detectForVideo(this.dom.video, timestamp);
+                    
                     this.fingerX = null;
                     this.fingerY = null;
 
-                    if (detections && detections.handLandmarks && detections.handLandmarks.length > 0) {
-                        const firstHand = detections.handLandmarks[0];
-
-                        // Draw hand skeleton lines
-                        this.dom.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-                        this.dom.ctx.lineWidth = 2;
-                        const connections = [
-                            [0,1],[1,2],[2,3],[3,4],
-                            [0,5],[5,6],[6,7],[7,8],
-                            [5,9],[9,10],[10,11],[11,12],
-                            [9,13],[13,14],[14,15],[15,16],
-                            [13,17],[17,18],[18,19],[19,20],[0,17]
-                        ];
-                        connections.forEach(([i, j]) => {
-                            this.dom.ctx.beginPath();
-                            this.dom.ctx.moveTo(firstHand[i].x * this.dom.canvas.width, firstHand[i].y * this.dom.canvas.height);
-                            this.dom.ctx.lineTo(firstHand[j].x * this.dom.canvas.width, firstHand[j].y * this.dom.canvas.height);
-                            this.dom.ctx.stroke();
-                        });
-
-                        // Draw index fingertip dot (Landmark 8)
-                        if (firstHand.length > 8) {
+                    // FIX: In JavaScript API, property is 'landmarks', NOT 'handLandmarks'
+                    if (detections && detections.landmarks && detections.landmarks.length > 0) {
+                        const firstHand = detections.landmarks[0];
+                        if (firstHand && firstHand.length > 8) {
                             const indexTip = firstHand[8];
                             this.fingerX = indexTip.x;
                             this.fingerY = indexTip.y;
 
+                            // Render Green Fingertip Circle (cv2.circle)
                             this.dom.ctx.beginPath();
-                            this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 12, 0, 2 * Math.PI);
-                            this.dom.ctx.fillStyle = "#10b981";
+                            this.dom.ctx.arc(this.fingerX * w, this.fingerY * h, 12, 0, 2 * Math.PI);
+                            this.dom.ctx.fillStyle = "#00ff00";
                             this.dom.ctx.fill();
                             this.dom.ctx.strokeStyle = "#ffffff";
                             this.dom.ctx.lineWidth = 2;
@@ -371,29 +359,34 @@
                         }
                     }
 
-                    // Render saved locations
+                    // Render saved positions during calibration
                     this.savedPositions.forEach((pos) => {
                         this.dom.ctx.beginPath();
-                        this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
-                        this.dom.ctx.lineWidth = 4;
-                        this.dom.ctx.strokeStyle = pos.color;
-                        this.dom.ctx.stroke();
+                        this.dom.ctx.arc(pos.x * w, pos.y * h, 20, 0, 2 * Math.PI);
+                        this.dom.ctx.fillStyle = "rgb(255, 165, 0)";
+                        this.dom.ctx.fill();
                     });
 
-                    // Test mode target matching
+                    // Test mode target verification (matching Python distance logic)
                     if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
                         const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
-                        const target = this.savedPositions[activeIdx];
+                        const activeTarget = this.savedPositions[activeIdx];
 
+                        // Draw Red Target Circle (cv2.circle(frame, (tx, ty), 30, (0, 0, 255), 2))
                         this.dom.ctx.beginPath();
-                        this.dom.ctx.arc(target.x * this.dom.canvas.width, target.y * this.dom.canvas.height, 35, 0, 2 * Math.PI);
+                        this.dom.ctx.arc(activeTarget.x * w, activeTarget.y * h, 30, 0, 2 * Math.PI);
                         this.dom.ctx.lineWidth = 2;
                         this.dom.ctx.strokeStyle = "#ef4444";
                         this.dom.ctx.stroke();
 
-                        if (this.fingerX !== null) {
-                            const deltaDist = Math.sqrt(Math.pow(this.fingerX - target.x, 2) + Math.pow(this.fingerY - target.y, 2));
-                            if (deltaDist < EngineConfig.THRESHOLD_DISTANCE) {
+                        if (this.fingerX !== null && this.fingerY !== null) {
+                            // Euclidean distance calculation in normalized space
+                            const distance = Math.sqrt(
+                                Math.pow(this.fingerX - activeTarget.x, 2) + 
+                                Math.pow(this.fingerY - activeTarget.y, 2)
+                            );
+
+                            if (distance < EngineConfig.THRESHOLD_DISTANCE) {
                                 this.holdCounter++;
                                 if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
                                     this.holdCounter = 0;
@@ -409,9 +402,12 @@
                                 this.holdCounter = Math.max(0, this.holdCounter - 1);
                             }
                         }
+
+                        // Status Overlay Info
                         this.dom.ctx.fillStyle = "#ffffff";
-                        this.dom.ctx.font = "14px monospace";
-                        this.dom.ctx.fillText(`BUFFER_STABILITY: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 20, this.dom.canvas.height - 20);
+                        this.dom.ctx.font = "16px monospace";
+                        this.dom.ctx.fillText(`Targeting: Position ${activeIdx + 1}`, 30, h - 45);
+                        this.dom.ctx.fillText(`Hold Progress: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 30, h - 20);
                     }
                 }
 
@@ -434,11 +430,11 @@
                     this.audio.beepSuccess();
                     const duration = (Date.now() - this.startTime) / 1000;
                     this.dom.analytics.className = "analytics-card success";
-                    this.dom.analytics.innerHTML = `<strong>\u{1F7E2} TRANSACTION_SUCCESS</strong><br>Verification completed in: ${duration.toFixed(2)}s`;
+                    this.dom.analytics.innerHTML = `<strong>STATUS: TASK CORRECT</strong><br>Time Taken to complete: ${duration.toFixed(2)} seconds`;
                 } else {
                     this.audio.beepFailure();
                     this.dom.analytics.className = "analytics-card failed";
-                    this.dom.analytics.innerHTML = `<strong>\u{1F534} TRANSACTION_FAILED</strong><br>Termination Code: ${terminationStatusSymbol}`;
+                    this.dom.analytics.innerHTML = `<strong>STATUS: TASK WRONG</strong><br>Reason: ${terminationStatusSymbol}`;
                 }
             }
         }
