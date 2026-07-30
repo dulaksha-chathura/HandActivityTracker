@@ -212,7 +212,7 @@
                     this.dom.hudState.innerText = "CORS_ERROR";
                     this.dom.hudTelemetry.innerText = "PLEASE USE HTTP SERVER";
                     console.error("Local file:// protocol detected. MediaPipe tasks require a web server.");
-                    alert("Please serve this file using a local web server (e.g. `python -m http.server`). File protocol is blocked by CORS.");
+                    alert("Please serve this file using a local web server (e.g. `python -m http.server`) or host via GitHub Pages.");
                     return;
                 }
 
@@ -221,26 +221,24 @@
                         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
                     );
 
-                    // Try GPU initialization first, fallback to CPU if unavailable
+                    const options = {
+                        baseOptions: {
+                            modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
+                            delegate: "GPU"
+                        },
+                        runningMode: "VIDEO",
+                        numHands: 1,
+                        minHandDetectionConfidence: 0.3,
+                        minHandPresenceConfidence: 0.3,
+                        minTrackingConfidence: 0.3
+                    };
+
                     try {
-                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                            baseOptions: {
-                                modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
-                                delegate: "GPU"
-                            },
-                            runningMode: "VIDEO",
-                            numHands: 1
-                        });
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
                     } catch (gpuError) {
                         console.warn("GPU Acceleration failed, falling back to CPU:", gpuError);
-                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                            baseOptions: {
-                                modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
-                                delegate: "CPU"
-                            },
-                            runningMode: "VIDEO",
-                            numHands: 1
-                        });
+                        options.baseOptions.delegate = "CPU";
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
                     }
 
                     this.transitionState(EngineStates.READY);
@@ -324,9 +322,9 @@
             }
 
             processPipelineFrame() {
-                if (this.state === EngineStates.READY || !this.dom.video.videoWidth) return;
-                
-                if (this.dom.video.currentTime !== this.lastVideoTime) {
+                if (this.state === EngineStates.READY) return;
+
+                if (this.dom.video.readyState >= 2 && this.dom.video.currentTime !== this.lastVideoTime) {
                     this.lastVideoTime = this.dom.video.currentTime;
 
                     this.dom.canvas.width = this.dom.video.videoWidth;
@@ -337,10 +335,10 @@
                     this.fingerX = null;
                     this.fingerY = null;
 
-                    if (detections.handLandmarks && detections.handLandmarks.length > 0) {
+                    if (detections && detections.handLandmarks && detections.handLandmarks.length > 0) {
                         const firstHand = detections.handLandmarks[0];
 
-                        // Render hand skeletal joint connections
+                        // Draw hand skeleton lines
                         this.dom.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
                         this.dom.ctx.lineWidth = 2;
                         const connections = [
@@ -357,15 +355,14 @@
                             this.dom.ctx.stroke();
                         });
 
-                        // Locate Index Tip Landmark (ID 8)
+                        // Draw index fingertip dot (Landmark 8)
                         if (firstHand.length > 8) {
                             const indexTip = firstHand[8];
                             this.fingerX = indexTip.x;
                             this.fingerY = indexTip.y;
 
-                            // Draw Green Pointer Dot
                             this.dom.ctx.beginPath();
-                            this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 10, 0, 2 * Math.PI);
+                            this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 12, 0, 2 * Math.PI);
                             this.dom.ctx.fillStyle = "#10b981";
                             this.dom.ctx.fill();
                             this.dom.ctx.strokeStyle = "#ffffff";
@@ -374,7 +371,7 @@
                         }
                     }
 
-                    // Render saved calibration targets
+                    // Render saved locations
                     this.savedPositions.forEach((pos) => {
                         this.dom.ctx.beginPath();
                         this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
@@ -383,7 +380,7 @@
                         this.dom.ctx.stroke();
                     });
 
-                    // Manage tracking & verification collision targets
+                    // Test mode target matching
                     if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
                         const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
                         const target = this.savedPositions[activeIdx];
