@@ -3,243 +3,411 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spatial Task Detector</title>
+    <title>Enterprise Spatial Task Quality Assurance Engine</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        .video-container { position: relative; width: 100%; max-width: 500px; margin: 15px auto; display: none; }
-        video { width: 100%; border-radius: 8px; transform: scaleX(-1); }
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .dashboard-container {
+            width: 100%;
+            max-width: 700px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 { font-size: 24px; margin-top: 0; font-weight: 700; letter-spacing: -0.025em; text-align: left; border-bottom: 1px solid #334155; padding-bottom: 12px;}
+        p { color: var(--text-muted); font-size: 14px; text-align: left; margin-bottom: 24px; line-height: 1.5; }
+
+        .system-hud {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background: var(--bg-primary);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-family: "Courier New", Courier, monospace;
+            border-left: 4px solid var(--accent-blue);
+        }
+
+        .hud-item { text-align: left; }
+        .hud-label { color: var(--text-muted); font-weight: bold; }
+        .hud-value { color: var(--text-main); }
+
+        .controls { display: flex; justify-content: flex-start; gap: 12px; margin-bottom: 20px; }
+        
+        button {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button:disabled { background-color: #334155; color: var(--text-muted); cursor: not-allowed; transform: none; }
+        button.abort { background-color: var(--accent-red); }
+
+        .viewport-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            background: #000;
+            margin-top: 16px;
+        }
+        video { width: 100%; height: auto; transform: scaleX(-1); display: block; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
-        button { background: #007bff; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 10px; }
-        button:disabled { background: #444; cursor: not-allowed; }
-        #hud { font-size: 18px; margin: 15px 0; font-weight: bold; }
-        #report { margin-top: 20px; font-size: 20px; padding: 15px; border-radius: 5px; display: none; }
-        .success { background: #1e4620; color: #4ade80; border: 1px solid #4ade80; }
-        .failed { background: #4c1d1d; color: #f87171; border: 1px solid #f87171; }
+
+        .analytics-card {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 8px;
+            display: none;
+            text-align: left;
+            animation: slideIn 0.3s ease-out;
+        }
+        .analytics-card.success { background: #064e3b; border: 1px solid var(--accent-green); }
+        .analytics-card.failed { background: #4c1d1d; border: 1px solid var(--accent-red); }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
-    
-    <!-- FIXED: Loading the primary engine files from Cloudflare (cdnjs) instead of jsDelivr to completely stop the connection timeout -->
-    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
-    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
+
+    <!-- Production Dependency Architecture -->
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Spatial Task Tracker</h1>
-        <p>Calibrate two relative positions in space, then complete the task under 60 seconds.</p>
-        <div id="hud">Status: Loading AI Models...</div>
-        <div class="controls">
-            <button id="btnAction" disabled>Start Calibration</button>
+    <div class="dashboard-container">
+        <h1>Spatial QA Verification Engine</h1>
+        <p>A decentralized, client-side Computer Vision pipeline designed for operational motion mapping verification loops.</p>
+        
+        <div class="system-hud">
+            <div class="hud-item"><span class="hud-label">ENGINE_STATE:</span> <span id="hudState" class="hud-value" style="color:var(--accent-red);">INITIALIZING</span></div>
+            <div class="hud-item"><span class="hud-label">TELEMETRY:</span> <span id="hudTelemetry" class="hud-value">N/A</span></div>
         </div>
-        <div class="video-container" id="videoContainer">
+        
+        <div class="controls">
+            <button id="btnPrimary" disabled>Awaiting Framework...</button>
+            <button id="btnAbort" class="abort" style="display: none;">Abort Routine</button>
+        </div>
+
+        <div class="viewport-wrapper" id="viewportWrapper">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="output_canvas"></canvas>
         </div>
-        <div id="report"></div>
+
+        <div id="analyticsCard" class="analytics-card"></div>
     </div>
 
     <script>
-        // Mapping global classes cleanly for browser framework stability
-        const video = document.getElementById("webcam");
-        const canvas = document.getElementById("output_canvas");
-        const ctx = canvas.getContext("2d");
-        const hud = document.getElementById("hud");
-        const btnAction = document.getElementById("btnAction");
-        const videoContainer = document.getElementById("videoContainer");
-        const report = document.getElementById("report");
+        /**
+         * System Configuration Model (SOLID Implementation)
+         */
+        const EngineConfig = {
+            THRESHOLD_DISTANCE: 0.15,
+            REQUIRED_HOLD_FRAMES: 6,
+            TIMEOUT_LIMIT_SEC: 60,
+            CAMERA_PROFILES: { width: 640, height: 480, facingMode: "user" },
+            LOCAL_MODEL_PATH: "hand_landmarker.task"
+        };
 
-        let handLandmarker = undefined;
-        let appState = "LOADING"; 
-        let fingerX = null, fingerY = null;
-        let savedPositions = [];
+        /**
+         * State Enums (Domain Driven State Machine)
+         */
+        const EngineStates = {
+            INITIALIZING: "INITIALIZING",
+            READY: "READY",
+            CALIBRATE_P1: "CALIBRATE_P1",
+            CALIBRATE_P2: "CALIBRATE_P2",
+            TEST_P1: "TEST_P1",
+            TEST_P2: "TEST_P2",
+            TERMINATED: "TERMINATED"
+        };
 
-        const DISTANCE_THRESHOLD = 0.15; 
-        const REQUIRED_HOLD_FRAMES = 5;
-        const TOTAL_ALLOWED_TIME = 60;
-
-        let holdCounter = 0;
-        let startTime = 0;
-        let timerInterval = null;
-        let streamRef = null;
-
-        // Modern, stable local object asset resolver
-        async function initializeHandLandmarker() {
-            try {
-                // Initialize using the cloudflare cdnjs module tracking layer
-                handLandmarker = new Hands({
-                    locateFile: (file) => {
-                        return `https://cloudflare.com{file}`;
-                    }
-                });
-
-                handLandmarker.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.7,
-                    minTrackingConfidence: 0.7
-                });
-
-                handLandmarker.onResults(onHandResults);
-                
-                appState = "READY";
-                hud.innerText = "Status: Ready to Calibrate";
-                btnAction.disabled = false;
-            } catch (err) {
-                hud.innerText = "Error loading AI network assets. Please try refreshing.";
-                console.error(err);
+        /**
+         * Decoupled Synthesis Audio Feed Engine
+         */
+        class WebAudioEngine {
+            constructor() {
+                this.ctx = null;
             }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+            playTone(freq, type, duration) {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+            beepSuccess() { this.playTone(880, "sine", 0.15); }
+            beepCheckpoint() { this.playTone(587, "triangle", 0.1); }
+            beepFailure() { this.playTone(220, "sawtooth", 0.4); }
         }
-        initializeHandLandmarker();
 
-        btnAction.addEventListener("click", async () => {
-            if (appState === "READY") {
-                savedPositions = [];
-                report.style.display = "none";
-                appState = "CALIBRATE_P1";
-                btnAction.innerText = "Save Position 1";
-                videoContainer.style.display = "block";
-                await startCamera();
-            } else if (appState === "CALIBRATE_P1" && fingerX !== null) {
-                savedPositions.push({ x: fingerX, y: fingerY, color: "#3b82f6" });
-                appState = "CALIBRATE_P2";
-                btnAction.innerText = "Save Position 2";
-            } else if (appState === "CALIBRATE_P2" && fingerX !== null) {
-                savedPositions.push({ x: fingerX, y: fingerY, color: "#eab308" });
-                appState = "TEST_P1";
-                btnAction.style.display = "none";
-                holdCounter = 0;
-                startTime = Date.now();
-                startTimer();
-            }
-        });
+        /**
+         * Core Enterprise Application Context Coordinator
+         */
+        class ApplicationContext {
+            constructor() {
+                this.state = EngineStates.INITIALIZING;
+                this.handLandmarker = null;
+                this.savedPositions = [];
+                this.holdCounter = 0;
+                this.startTime = 0;
+                this.timerInterval = null;
+                this.streamRef = null;
+                this.fingerX = null;
+                this.fingerY = null;
+                this.lastVideoTime = -1;
 
-        async function startCamera() {
-            try {
-                const constraints = { video: { width: 640, height: 480, facingMode: "user" } };
-                streamRef = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = streamRef;
-                
-                // Directly bind camera pipeline frames into execution loops
-                const cameraLoop = async () => {
-                    if (streamRef && !video.paused && !video.ended) {
-                        await handLandmarker.send({ image: video });
-                    }
-                    if (appState !== "READY") {
-                        window.requestAnimationFrame(cameraLoop);
-                    }
+                this.audio = new WebAudioEngine();
+
+                // Bind UI Nodes
+                this.dom = {
+                    hudState: document.getElementById("hudState"),
+                    hudTelemetry: document.getElementById("hudTelemetry"),
+                    btnPrimary: document.getElementById("btnPrimary"),
+                    btnAbort: document.getElementById("btnAbort"),
+                    viewport: document.getElementById("viewportWrapper"),
+                    video: document.getElementById("webcam"),
+                    canvas: document.getElementById("output_canvas"),
+                    ctx: document.getElementById("output_canvas").getContext("2d"),
+                    analytics: document.getElementById("analyticsCard")
                 };
-                video.addEventListener("loadeddata", () => {
-                    window.requestAnimationFrame(cameraLoop);
+
+                this.dom.btnPrimary.addEventListener("click", () => this.handlePrimaryAction());
+                this.dom.btnAbort.addEventListener("click", () => this.terminatePipeline(false, "USER_ABORT"));
+            }
+
+            async bootstrap() {
+                try {
+                    const vision = await mp.tasks.vision.FilesetResolver.forVisionTasks(
+                        "https://jsdelivr.net"
+                    );
+                    this.handLandmarker = await mp.tasks.vision.HandLandmarker.createFromOptions(vision, {
+                        baseOptions: { modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, delegate: "GPU" },
+                        runningMode: "VIDEO",
+                        numHands: 1
+                    });
+                    this.transitionState(EngineStates.READY);
+                } catch (error) {
+                    this.dom.hudState.innerText = "CRITICAL_ERROR";
+                    this.dom.hudTelemetry.innerText = "IO_EXCEPTION / FAULT";
+                    console.error("Bootstrap Fatal Loop: ", error);
+                }
+            }
+
+            transitionState(newState) {
+                this.state = newState;
+                this.dom.hudState.innerText = newState;
+
+                switch(newState) {
+                    case EngineStates.READY:
+                        this.dom.hudState.style.color = "var(--accent-blue)";
+                        this.dom.btnPrimary.disabled = false;
+                        this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
+                        break;
+                    case EngineStates.CALIBRATE_P1:
+                        this.dom.btnPrimary.innerText = "Commit Vector Location 1";
+                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
+                    break;
+                case EngineStates.CALIBRATE_P2:
+                    this.dom.btnPrimary.innerText = "Commit Vector Location 2";
+                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
+                    break;
+                case EngineStates.TEST_P1:
+                    this.dom.btnPrimary.style.display = "none";
+                    this.dom.btnAbort.style.display = "inline-block";
+                    break;
+            }
+        }
+
+        async handlePrimaryAction() {
+            this.audio.init();
+            if (this.state === EngineStates.READY) {
+                this.savedPositions = [];
+                this.dom.analytics.style.display = "none";
+                this.transitionState(EngineStates.CALIBRATE_P1);
+                this.dom.viewport.style.display = "block";
+                await this.initHardwareStream();
+            } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
+                this.audio.beepCheckpoint();
+                this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#3b82f6" });
+                this.transitionState(EngineStates.CALIBRATE_P2);
+            } else if (this.state === EngineStates.CALIBRATE_P2 && this.fingerX !== null) {
+                this.audio.beepCheckpoint();
+                this.savedPositions.push({ x: this.fingerX, y: this.fingerY, color: "#eab308" });
+                this.holdCounter = 0;
+                this.startTime = Date.now();
+                this.transitionState(EngineStates.TEST_P1);
+                this.startChronoLoop();
+            }
+        }
+
+        async initHardwareStream() {
+            try {
+                this.streamRef = await navigator.mediaDevices.getUserMedia({ video: EngineConfig.CAMERA_PROFILES });
+                this.dom.video.srcObject = this.streamRef;
+                this.dom.video.addEventListener("loadeddata", () => {
+                    window.requestAnimationFrame(() => this.processPipelineFrame());
                 });
             } catch (err) {
-                hud.innerText = "Camera access denied or unavailable.";
-                console.error(err);
+                this.dom.hudTelemetry.innerText = "HARDWARE_ACCESS_DENIED";
+                this.terminatePipeline(false, "PERMISSIONS_EXCEPTION");
             }
         }
 
-        function stopCamera() {
-            if (streamRef) {
-                streamRef.getTracks().forEach(track => track.stop());
-            }
-            videoContainer.style.display = "none";
-            btnAction.style.display = "inline-block";
-            btnAction.innerText = "Restart Test";
-            appState = "READY";
-        }
-
-        function startTimer() {
-            timerInterval = setInterval(() => {
-                let elapsed = (Date.now() - startTime) / 1000;
-                let remaining = Math.max(0, Math.ceil(TOTAL_ALLOWED_TIME - elapsed));
+        startChronoLoop() {
+            this.timerInterval = setInterval(() => {
+                const elapsed = (Date.now() - this.startTime) / 1000;
+                const remaining = Math.max(0, Math.ceil(EngineConfig.TIMEOUT_LIMIT_SEC - elapsed));
                 
-                if (appState === "TEST_P1" || appState === "TEST_P2") {
-                    hud.innerText = `TEST ACTIVE | Time Left: ${remaining}s`;
+                if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
+                    this.dom.hudTelemetry.innerText = `TIMEOUT IN: ${remaining}s`;
                 }
-
-                if (remaining <= 0 && (appState === "TEST_P1" || appState === "TEST_P2")) {
-                    endTask(false, 0);
-                }
+                if (remaining <= 0) this.terminatePipeline(false, "TIMEOUT_EXCEPTION");
             }, 200);
         }
 
-        function endTask(isSuccess, timeTaken) {
-            clearInterval(timerInterval);
-            stopCamera();
-            report.style.display = "block";
-            if (isSuccess) {
-                hud.innerText = "Status: Completed!";
-                report.className = "success";
-                report.innerHTML = `<strong>STATUS: TASK CORRECT</strong><br>Time Taken: ${timeTaken.toFixed(2)} seconds!`;
-            } else {
-                hud.innerText = "Status: Failed!";
-                report.className = "failed";
-                report.innerHTML = `<strong>STATUS: TASK WRONG</strong><br>Reason: 60 Seconds Timeout Exceeded.`;
+        processPipelineFrame() {
+            if (this.state === EngineStates.READY || !this.dom.video.videoWidth) return;
+            if (this.dom.video.currentTime === this.lastVideoTime) {
+                window.requestAnimationFrame(() => this.processPipelineFrame());
+                return;
             }
-        }
+            this.lastVideoTime = this.dom.video.currentTime;
 
-        function onHandResults(results) {
-            if (!video.videoWidth || appState === "READY") return;
+            this.dom.canvas.width = this.dom.video.videoWidth;
+            this.dom.canvas.height = this.dom.video.videoHeight;
+            this.dom.ctx.clearRect(0, 0, this.dom.canvas.width, this.dom.canvas.height);
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Execute Neural Model Frame Mapping Context
+            const detections = this.handLandmarker.detectForVideo(this.dom.video, performance.now());
+            this.fingerX = null; 
+            this.fingerY = null;
 
-            fingerX = null; 
-            fingerY = null;
+            if (detections.handLandmarks && detections.handLandmarks.length > 0) {
+                const trackingNodes = detections.handLandmarks[0];
+                if (trackingNodes && trackingNodes.length > 8) {
+                    this.fingerX = trackingNodes[8].x;
+                    this.fingerY = trackingNodes[8].y;
 
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const firstHand = results.multiHandLandmarks[0];
-                if (firstHand && firstHand.length > 8) {
-                    const indexTip = firstHand[8]; // Extract index tip landmark position
-                    fingerX = indexTip.x;
-                    fingerY = indexTip.y;
-
-                    ctx.beginPath();
-                    ctx.arc(fingerX * canvas.width, fingerY * canvas.height, 10, 0, 2 * Math.PI);
-                    ctx.fillStyle = "#22c55e";
-                    ctx.fill();
+                    this.dom.ctx.beginPath();
+                    this.dom.ctx.arc(this.fingerX * this.dom.canvas.width, this.fingerY * this.dom.canvas.height, 8, 0, 2 * Math.PI);
+                    this.dom.ctx.fillStyle = "var(--accent-green)";
+                    this.dom.ctx.fill();
                 }
             }
 
-            savedPositions.forEach((pos, idx) => {
-                ctx.beginPath();
-                ctx.arc(pos.x * canvas.width, pos.y * canvas.height, 25, 0, 2 * Math.PI);
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = pos.color;
-                ctx.stroke();
-                ctx.fillStyle = "white";
-                ctx.font = "16px Arial";
-                ctx.fillText(`P${idx+1}`, pos.x * canvas.width - 10, pos.y * canvas.height + 5);
+            // Render Verification Matrix Boundaries
+            this.savedPositions.forEach((pos, i) => {
+                this.dom.ctx.beginPath();
+                this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
+                this.dom.ctx.lineWidth = 4;
+                this.dom.ctx.strokeStyle = pos.color;
+                this.dom.ctx.stroke();
             });
 
-            if (appState === "CALIBRATE_P1") hud.innerText = "Action: Position your finger for Target 1 and tap button.";
-            if (appState === "CALIBRATE_P2") hud.innerText = "Action: Position your finger for Target 2 and tap button.";
+            // Evaluate State Matrix Transitions
+            if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
+                const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
+                const target = this.savedPositions[activeIdx];
 
-            if (appState === "TEST_P1" || appState === "TEST_P2") {
-                const targetIdx = appState === "TEST_P1" ? 0 : 1;
-                const activeTarget = savedPositions[targetIdx];
+                this.dom.ctx.beginPath();
+                this.dom.ctx.arc(target.x * this.dom.canvas.width, target.y * this.dom.canvas.height, 35, 0, 2 * Math.PI);
+                this.dom.ctx.lineWidth = 2;
+                this.dom.ctx.strokeStyle = "var(--accent-red)";
+                this.dom.ctx.stroke();
 
-                ctx.beginPath();
-                ctx.arc(activeTarget.x * canvas.width, activeTarget.y * canvas.height, 35, 0, 2 * Math.PI);
-                if (distance < DISTANCE_THRESHOLD) {
-                    holdCounter++;
-                    if (holdCounter >= REQUIRED_HOLD_FRAMES) {
-                        holdCounter = 0;
-                        if (appState === "TEST_P1") {
-                            appState = "TEST_P2";
-                        } else if (appState === "TEST_P2") {
-                            let finalDuration = (Date.now() - startTime) / 1000;
-                            endTask(true, finalDuration);
-                            return;
+                if (this.fingerX !== null) {
+                    const deltaDist = Math.sqrt(Math.pow(this.fingerX - target.x, 2) + Math.pow(this.fingerY - target.y, 2));
+                    if (deltaDist < EngineConfig.THRESHOLD_DISTANCE) {
+                        this.holdCounter++;
+                        if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
+                            this.holdCounter = 0;
+                            if (this.state === EngineStates.TEST_P1) {
+                                this.audio.beepCheckpoint();
+                                this.transitionState(EngineStates.TEST_P2);
+                            } else {
+                                this.terminatePipeline(true, "SUCCESS_MET");
+                                return;
+                            }
                         }
+                    } else {
+                        this.holdCounter = Math.max(0, this.holdCounter - 1);
                     }
-                } else {
-                    holdCounter = Math.max(0, holdCounter - 1);
                 }
+                this.dom.ctx.fillStyle = "#ffffff";
+                this.dom.ctx.font = "14px monospace";
+                this.dom.ctx.fillText(`BUFFER_STABILITY: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 20, this.dom.canvas.height - 20);
             }
 
-            // Draw progress track HUD at the bottom of the canvas layer
-            ctx.fillStyle = "white";
-            ctx.font = "18px Arial";
-            ctx.fillText(`Hold Progress: ${holdCounter}/${REQUIRED_HOLD_FRAMES}`, 20, canvas.height - 20);
+            window.requestAnimationFrame(() => this.processPipelineFrame());
         }
+
+        terminatePipeline(isSuccess, terminationStatusSymbol) {
+            clearInterval(this.timerInterval);
+            if (this.streamRef) this.streamRef.getTracks().forEach(track => track.stop());
+
+            this.dom.viewport.style.display = "none";
+            this.dom.btnAbort.style.display = "none";
+            this.dom.btnPrimary.style.display = "inline-block";
+            
+            this.transitionState(EngineStates.READY);
+            this.dom.hudTelemetry.innerText = terminationStatusSymbol;
+            this.dom.analytics.style.display = "block";
+
+            if (isSuccess) {
+                this.audio.beepSuccess();
+                const duration = (Date.now() - this.startTime) / 1000;
+                this.dom.analytics.className = "analytics-card success";
+                this.dom.analytics.innerHTML = `<strong>🟢 TRANSACTION_SUCCESS</strong><br>Verification completed in: ${duration.toFixed(2)}s`;
+            } else {
+                this.audio.beepFailure();
+                this.dom.analytics.className = "analytics-card failed";
+                this.dom.analytics.innerHTML = `<strong>🔴 TRANSACTION_FAILED</strong><br>Termination Code: ${terminationStatusSymbol}`;
+            }
+        }
+    }
+
+    // Initialize Context Container on DOM Content Resolution
+    document.addEventListener("DOMContentLoaded", () => {
+        const context = new ApplicationContext();
+        context.bootstrap();
+    });
+
 
