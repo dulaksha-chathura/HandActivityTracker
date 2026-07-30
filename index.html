@@ -17,31 +17,24 @@
         .success { background: #1e4620; color: #4ade80; border: 1px solid #4ade80; }
         .failed { background: #4c1d1d; color: #f87171; border: 1px solid #f87171; }
     </style>
-    
-    <!-- FIXED: Using Google's recommended jsDelivr bundle pathway to prevent CORS timeouts -->
     <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="container">
         <h1>Spatial Task Tracker</h1>
         <p>Calibrate two relative positions in space, then complete the task under 60 seconds.</p>
-        
         <div id="hud">Status: Loading AI Models...</div>
-        
         <div class="controls">
             <button id="btnAction" disabled>Start Calibration</button>
         </div>
-
         <div class="video-container" id="videoContainer">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="output_canvas"></canvas>
         </div>
-
         <div id="report"></div>
     </div>
 
     <script>
-        // Mapping global classes cleanly
         const HandLandmarker = mp.tasks.vision.HandLandmarker;
         const FilesetResolver = mp.tasks.vision.FilesetResolver;
 
@@ -69,7 +62,6 @@
 
         async function initializeHandLandmarker() {
             try {
-                // FIXED: Changed library source domain directory map to jsdelivr CDN
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://jsdelivr.net"
                 );
@@ -114,10 +106,15 @@
         });
 
         async function startCamera() {
-            const constraints = { video: { width: 640, height: 480, facingMode: "user" } };
-            streamRef = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = streamRef;
-            video.addEventListener("loadeddata", predictWebcam);
+            try {
+                const constraints = { video: { width: 640, height: 480, facingMode: "user" } };
+                streamRef = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = streamRef;
+                video.addEventListener("loadeddata", predictWebcam);
+            } catch (err) {
+                hud.innerText = "Camera access denied or unavailable.";
+                console.error(err);
+            }
         }
 
         function stopCamera() {
@@ -162,7 +159,7 @@
 
         let lastVideoTime = -1;
         async function predictWebcam() {
-            if (video.currentTime === lastVideoTime || appState === "READY") {
+            if (!video.videoWidth || video.currentTime === lastVideoTime || appState === "READY") {
                 if (appState !== "READY") window.requestAnimationFrame(predictWebcam);
                 return;
             }
@@ -175,19 +172,21 @@
             let startTimeMs = performance.now();
             const detections = handLandmarker.detectForVideo(video, startTimeMs);
 
-            fingerX = null; fingerY = null;
+            fingerX = null; 
+            fingerY = null;
 
             if (detections.handLandmarks && detections.handLandmarks.length > 0) {
-                // Accessing nested array safely from the top detection mapping instance
-                const landmarks = detections.handLandmarks[0];
-                const indexTip = landmarks[8]; 
-                fingerX = indexTip.x;
-                fingerY = indexTip.y;
+                const firstHand = detections.handLandmarks[0]; 
+                if (firstHand && firstHand.length > 8) {
+                    const indexTip = firstHand[8]; 
+                    fingerX = indexTip.x;
+                    fingerY = indexTip.y;
 
-                ctx.beginPath();
-                ctx.arc(fingerX * canvas.width, fingerY * canvas.height, 10, 0, 2 * Math.PI);
-                ctx.fillStyle = "#22c55e";
-                ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(fingerX * canvas.width, fingerY * canvas.height, 10, 0, 2 * Math.PI);
+                    ctx.fillStyle = "#22c55e";
+                    ctx.fill();
+                }
             }
 
             savedPositions.forEach((pos, idx) => {
@@ -214,7 +213,7 @@
                 ctx.strokeStyle = "#ef4444";
                 ctx.stroke();
 
-                if (fingerX !== null) {
+                if (fingerX !== null && fingerY !== null) {
                     let distance = Math.sqrt(Math.pow(fingerX - activeTarget.x, 2) + Math.pow(fingerY - activeTarget.y, 2));
                     
                     if (distance < DISTANCE_THRESHOLD) {
@@ -237,7 +236,7 @@
                     holdCounter = Math.max(0, holdCounter - 1);
                 }
             }
-            
+
             ctx.fillStyle = "white";
             ctx.font = "18px Arial";
             ctx.fillText(`Hold Progress: ${holdCounter}/${REQUIRED_HOLD_FRAMES}`, 20, canvas.height - 20);
