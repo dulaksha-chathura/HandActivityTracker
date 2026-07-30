@@ -67,7 +67,8 @@
                 );
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://googleapis.com",
+                        // FIXED: Pointing directly to your local file in the GitHub repo
+                        modelAssetPath: "hand_landmarker.task",
                         delegate: "GPU"
                     },
                     runningMode: "VIDEO",
@@ -77,7 +78,7 @@
                 hud.innerText = "Status: Ready to Calibrate";
                 btnAction.disabled = false;
             } catch (err) {
-                hud.innerText = "Error loading AI network. Check internet and refresh.";
+                hud.innerText = "Error loading local AI assets. Refreshing the browser might help.";
                 console.error(err);
             }
         }
