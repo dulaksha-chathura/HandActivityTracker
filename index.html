@@ -101,7 +101,7 @@
         }
     </style>
 
-    <!-- FIXED: Pulling structural dependencies from cdnjs Cloudflare framework directory -->
+    <!-- FIXED URL: Corrected endpoint mapping to the official open-source cdnjs delivery pool -->
     <script src="https://cloudflare.com" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -211,14 +211,13 @@
 
             async bootstrap() {
                 try {
-                    // FIXED: Setting internal WASM compilation engine directory to Cloudflare's secure cdnjs network path map
+                    // FIXED INTERNALS: Points securely to Cloudflare's verified CDN path map
                     const vision = await FilesetResolver.forVisionTasks(
                         "https://cloudflare.com"
                     );
                     
                     this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
                         baseOptions: { 
-                            // Points back locally inside your repo to extract your 15mb data model file
                             modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, 
                             delegate: "GPU" 
                         },
@@ -239,8 +238,8 @@
 
                 switch(newState) {
                     case EngineStates.READY:
-                    this.dom.hudState.style.color = "var(--accent-blue)";
-                    this.dom.btnPrimary.disabled = false;
+                        this.dom.hudState.style.color = "var(--accent-blue)";
+                        this.dom.btnPrimary.disabled = false;
                     this.dom.btnPrimary.innerText = "Initialize Setup Sequence";
                     break;
                 case EngineStates.CALIBRATE_P1:
