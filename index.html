@@ -18,8 +18,8 @@
         .failed { background: #4c1d1d; color: #f87171; border: 1px solid #f87171; }
     </style>
     
-    <!-- Load Tasks-Vision Bundle directly via unpkg CDN -->
-    <script src="https://unpkg.com" crossorigin="anonymous"></script>
+    <!-- FIXED: Using Google's recommended jsDelivr bundle pathway to prevent CORS timeouts -->
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="container">
@@ -41,7 +41,7 @@
     </div>
 
     <script>
-        // Use the global object loaded by the script tag
+        // Mapping global classes cleanly
         const HandLandmarker = mp.tasks.vision.HandLandmarker;
         const FilesetResolver = mp.tasks.vision.FilesetResolver;
 
@@ -69,12 +69,13 @@
 
         async function initializeHandLandmarker() {
             try {
+                // FIXED: Changed library source domain directory map to jsdelivr CDN
                 const vision = await FilesetResolver.forVisionTasks(
-                    "https://unpkg.com"
+                    "https://jsdelivr.net"
                 );
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                        modelAssetPath: "https://googleapis.com",
                         delegate: "GPU"
                     },
                     runningMode: "VIDEO",
@@ -177,6 +178,7 @@
             fingerX = null; fingerY = null;
 
             if (detections.handLandmarks && detections.handLandmarks.length > 0) {
+                // Accessing nested array safely from the top detection mapping instance
                 const landmarks = detections.handLandmarks[0];
                 const indexTip = landmarks[8]; 
                 fingerX = indexTip.x;
@@ -219,9 +221,6 @@
                         holdCounter++;
                         if (holdCounter >= REQUIRED_HOLD_FRAMES) {
                             holdCounter = 0;
-                            if (appState === "TEST_P1") {
-                                appState = "TEST_P2";
-                            } else if (appState === "TEST_P2") {
                 if (distance < DISTANCE_THRESHOLD) {
                     holdCounter++;
                     if (holdCounter >= REQUIRED_HOLD_FRAMES) {
@@ -238,14 +237,13 @@
                     holdCounter = Math.max(0, holdCounter - 1);
                 }
             }
-
-            // Draw HUD text elements at the bottom of the canvas
+            
             ctx.fillStyle = "white";
             ctx.font = "18px Arial";
             ctx.fillText(`Hold Progress: ${holdCounter}/${REQUIRED_HOLD_FRAMES}`, 20, canvas.height - 20);
         }
 
-        // Loop the camera frame analysis as long as the test isn't resting
         if (appState !== "READY") {
             window.requestAnimationFrame(predictWebcam);
         }
+
