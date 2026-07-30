@@ -17,7 +17,10 @@
         .success { background: #1e4620; color: #4ade80; border: 1px solid #4ade80; }
         .failed { background: #4c1d1d; color: #f87171; border: 1px solid #f87171; }
     </style>
-    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+    
+    <!-- FIXED: Loading the primary engine files from Cloudflare (cdnjs) instead of jsDelivr to completely stop the connection timeout -->
+    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
+    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="container">
@@ -35,9 +38,7 @@
     </div>
 
     <script>
-        const HandLandmarker = mp.tasks.vision.HandLandmarker;
-        const FilesetResolver = mp.tasks.vision.FilesetResolver;
-
+        // Mapping global classes cleanly for browser framework stability
         const video = document.getElementById("webcam");
         const canvas = document.getElementById("output_canvas");
         const ctx = canvas.getContext("2d");
@@ -60,25 +61,30 @@
         let timerInterval = null;
         let streamRef = null;
 
+        // Modern, stable local object asset resolver
         async function initializeHandLandmarker() {
             try {
-                const vision = await FilesetResolver.forVisionTasks(
-                    "https://jsdelivr.net"
-                );
-                handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                    baseOptions: {
-                        // FIXED: Pointing directly to your local file in the GitHub repo
-                        modelAssetPath: "hand_landmarker.task",
-                        delegate: "GPU"
-                    },
-                    runningMode: "VIDEO",
-                    numHands: 1
+                // Initialize using the cloudflare cdnjs module tracking layer
+                handLandmarker = new Hands({
+                    locateFile: (file) => {
+                        return `https://cloudflare.com{file}`;
+                    }
                 });
+
+                handLandmarker.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.7
+                });
+
+                handLandmarker.onResults(onHandResults);
+                
                 appState = "READY";
                 hud.innerText = "Status: Ready to Calibrate";
                 btnAction.disabled = false;
             } catch (err) {
-                hud.innerText = "Error loading local AI assets. Refreshing the browser might help.";
+                hud.innerText = "Error loading AI network assets. Please try refreshing.";
                 console.error(err);
             }
         }
@@ -111,7 +117,19 @@
                 const constraints = { video: { width: 640, height: 480, facingMode: "user" } };
                 streamRef = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = streamRef;
-                video.addEventListener("loadeddata", predictWebcam);
+                
+                // Directly bind camera pipeline frames into execution loops
+                const cameraLoop = async () => {
+                    if (streamRef && !video.paused && !video.ended) {
+                        await handLandmarker.send({ image: video });
+                    }
+                    if (appState !== "READY") {
+                        window.requestAnimationFrame(cameraLoop);
+                    }
+                };
+                video.addEventListener("loadeddata", () => {
+                    window.requestAnimationFrame(cameraLoop);
+                });
             } catch (err) {
                 hud.innerText = "Camera access denied or unavailable.";
                 console.error(err);
@@ -158,28 +176,20 @@
             }
         }
 
-        let lastVideoTime = -1;
-        async function predictWebcam() {
-            if (!video.videoWidth || video.currentTime === lastVideoTime || appState === "READY") {
-                if (appState !== "READY") window.requestAnimationFrame(predictWebcam);
-                return;
-            }
-            lastVideoTime = video.currentTime;
+        function onHandResults(results) {
+            if (!video.videoWidth || appState === "READY") return;
 
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            let startTimeMs = performance.now();
-            const detections = handLandmarker.detectForVideo(video, startTimeMs);
-
             fingerX = null; 
             fingerY = null;
 
-            if (detections.handLandmarks && detections.handLandmarks.length > 0) {
-                const firstHand = detections.handLandmarks[0]; 
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const firstHand = results.multiHandLandmarks[0];
                 if (firstHand && firstHand.length > 8) {
-                    const indexTip = firstHand[8]; 
+                    const indexTip = firstHand[8]; // Extract index tip landmark position
                     fingerX = indexTip.x;
                     fingerY = indexTip.y;
 
@@ -210,17 +220,6 @@
 
                 ctx.beginPath();
                 ctx.arc(activeTarget.x * canvas.width, activeTarget.y * canvas.height, 35, 0, 2 * Math.PI);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = "#ef4444";
-                ctx.stroke();
-
-                if (fingerX !== null && fingerY !== null) {
-                    let distance = Math.sqrt(Math.pow(fingerX - activeTarget.x, 2) + Math.pow(fingerY - activeTarget.y, 2));
-                    
-                    if (distance < DISTANCE_THRESHOLD) {
-                        holdCounter++;
-                        if (holdCounter >= REQUIRED_HOLD_FRAMES) {
-                            holdCounter = 0;
                 if (distance < DISTANCE_THRESHOLD) {
                     holdCounter++;
                     if (holdCounter >= REQUIRED_HOLD_FRAMES) {
@@ -238,12 +237,9 @@
                 }
             }
 
+            // Draw progress track HUD at the bottom of the canvas layer
             ctx.fillStyle = "white";
             ctx.font = "18px Arial";
             ctx.fillText(`Hold Progress: ${holdCounter}/${REQUIRED_HOLD_FRAMES}`, 20, canvas.height - 20);
-        }
-
-        if (appState !== "READY") {
-            window.requestAnimationFrame(predictWebcam);
         }
 
