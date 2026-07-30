@@ -101,8 +101,8 @@
         }
     </style>
 
-    <!-- FIXED: Pulling the core script bundle from a reliable unpkg version pathway -->
-    <script src="https://unpkg.com" crossorigin="anonymous"></script>
+    <!-- FIXED: Pulling structural dependencies from cdnjs Cloudflare framework directory -->
+    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -128,7 +128,6 @@
     </div>
 
     <script>
-        // Mapping global classes cleanly from the unpkg bundle file
         const HandLandmarker = mp.tasks.vision.HandLandmarker;
         const FilesetResolver = mp.tasks.vision.FilesetResolver;
 
@@ -212,14 +211,14 @@
 
             async bootstrap() {
                 try {
-                    // FIXED: Matching unpkg path definition structure for internal WebAssembly resolution
+                    // FIXED: Setting internal WASM compilation engine directory to Cloudflare's secure cdnjs network path map
                     const vision = await FilesetResolver.forVisionTasks(
-                        "https://unpkg.com"
+                        "https://cloudflare.com"
                     );
                     
                     this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
                         baseOptions: { 
-                            // Reading your local repo's hand_landmarker.task file asset
+                            // Points back locally inside your repo to extract your 15mb data model file
                             modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, 
                             delegate: "GPU" 
                         },
@@ -325,7 +324,7 @@
             if (detections.handLandmarks && detections.handLandmarks.length > 0) {
                 const firstHand = detections.handLandmarks[0];
                 if (firstHand && firstHand.length > 8) {
-                    const indexTip = firstHand[8]; 
+                    const indexTip = firstHand[8];
                     this.fingerX = indexTip.x;
                     this.fingerY = indexTip.y;
 
