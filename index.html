@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spatial Task Detector</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        .video-container { position: relative; width: 100%; max-width: 500px; margin: 15px auto; display: none; }
+        video { width: 100%; border-radius: 8px; transform: scaleX(-1); }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 10px; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #hud { font-size: 18px; margin: 15px 0; font-weight: bold; }
+        #report { margin-top: 20px; font-size: 20px; padding: 15px; border-radius: 5px; display: none; }
+        .success { background: #1e4620; color: #4ade80; border: 1px solid #4ade80; }
+        .failed { background: #4c1d1d; color: #f87171; border: 1px solid #f87171; }
+    </style>
+    <!-- Load MediaPipe Tasks Vision Library -->
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Spatial Task Tracker</h1>
+        <p>Calibrate two relative positions in space, then complete the task under 60 seconds.</p>
+        
+        <div id="hud">Status: Loading AI Models...</div>
+        
+        <div class="controls">
+            <button id="btnAction" disabled>Start Calibration</button>
+        </div>
+
+        <div class="video-container" id="videoContainer">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="output_canvas"></canvas>
+        </div>
+
+        <div id="report"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
