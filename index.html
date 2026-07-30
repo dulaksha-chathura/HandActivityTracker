@@ -101,8 +101,8 @@
         }
     </style>
 
-    <!-- Production Dependency Architecture -->
-    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+    <!-- FIXED: Loading the primary script from unpkg framework CDN instead of jsDelivr -->
+    <script src="https://unpkg.com" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -128,9 +128,6 @@
     </div>
 
     <script>
-        /**
-         * System Configuration Model (SOLID Implementation)
-         */
         const EngineConfig = {
             THRESHOLD_DISTANCE: 0.15,
             REQUIRED_HOLD_FRAMES: 6,
@@ -139,9 +136,6 @@
             LOCAL_MODEL_PATH: "hand_landmarker.task"
         };
 
-        /**
-         * State Enums (Domain Driven State Machine)
-         */
         const EngineStates = {
             INITIALIZING: "INITIALIZING",
             READY: "READY",
@@ -152,13 +146,8 @@
             TERMINATED: "TERMINATED"
         };
 
-        /**
-         * Decoupled Synthesis Audio Feed Engine
-         */
         class WebAudioEngine {
-            constructor() {
-                this.ctx = null;
-            }
+            constructor() { this.ctx = null; }
             init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
             playTone(freq, type, duration) {
                 this.init();
@@ -178,9 +167,6 @@
             beepFailure() { this.playTone(220, "sawtooth", 0.4); }
         }
 
-        /**
-         * Core Enterprise Application Context Coordinator
-         */
         class ApplicationContext {
             constructor() {
                 this.state = EngineStates.INITIALIZING;
@@ -193,10 +179,8 @@
                 this.fingerX = null;
                 this.fingerY = null;
                 this.lastVideoTime = -1;
-
                 this.audio = new WebAudioEngine();
 
-                // Bind UI Nodes
                 this.dom = {
                     hudState: document.getElementById("hudState"),
                     hudTelemetry: document.getElementById("hudTelemetry"),
@@ -215,8 +199,9 @@
 
             async bootstrap() {
                 try {
+                    // FIXED: Shifted internal WASM parsing logic directory reference cleanly from jsDelivr to unpkg
                     const vision = await mp.tasks.vision.FilesetResolver.forVisionTasks(
-                        "https://jsdelivr.net"
+                        "https://unpkg.com"
                     );
                     this.handLandmarker = await mp.tasks.vision.HandLandmarker.createFromOptions(vision, {
                         baseOptions: { modelAssetPath: EngineConfig.LOCAL_MODEL_PATH, delegate: "GPU" },
@@ -243,10 +228,9 @@
                         break;
                     case EngineStates.CALIBRATE_P1:
                         this.dom.btnPrimary.innerText = "Commit Vector Location 1";
-                    this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
-                    break;
-                case EngineStates.CALIBRATE_P2:
-                    this.dom.btnPrimary.innerText = "Commit Vector Location 2";
+                        this.dom.hudTelemetry.innerText = "Mapping Target Coordinate alpha";
+                        break;
+                    case EngineStates.CALIBRATE_P2:
                     this.dom.hudTelemetry.innerText = "Mapping Target Coordinate beta";
                     break;
                 case EngineStates.TEST_P1:
@@ -315,7 +299,6 @@
             this.dom.canvas.height = this.dom.video.videoHeight;
             this.dom.ctx.clearRect(0, 0, this.dom.canvas.width, this.dom.canvas.height);
 
-            // Execute Neural Model Frame Mapping Context
             const detections = this.handLandmarker.detectForVideo(this.dom.video, performance.now());
             this.fingerX = null; 
             this.fingerY = null;
@@ -333,8 +316,7 @@
                 }
             }
 
-            // Render Verification Matrix Boundaries
-            this.savedPositions.forEach((pos, i) => {
+            this.savedPositions.forEach((pos) => {
                 this.dom.ctx.beginPath();
                 this.dom.ctx.arc(pos.x * this.dom.canvas.width, pos.y * this.dom.canvas.height, 25, 0, 2 * Math.PI);
                 this.dom.ctx.lineWidth = 4;
@@ -342,7 +324,6 @@
                 this.dom.ctx.stroke();
             });
 
-            // Evaluate State Matrix Transitions
             if (this.state === EngineStates.TEST_P1 || this.state === EngineStates.TEST_P2) {
                 const activeIdx = this.state === EngineStates.TEST_P1 ? 0 : 1;
                 const target = this.savedPositions[activeIdx];
@@ -404,10 +385,8 @@
         }
     }
 
-    // Initialize Context Container on DOM Content Resolution
     document.addEventListener("DOMContentLoaded", () => {
         const context = new ApplicationContext();
         context.bootstrap();
     });
-
 
