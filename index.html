@@ -226,7 +226,7 @@
                     const options = {
                         baseOptions: {
                             modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
-                            delegate: "CPU"
+                            delegate: "GPU"
                         },
                         runningMode: "VIDEO",
                         numHands: 1,
@@ -400,7 +400,7 @@
                 };
             
                 const normRef = normalizeGesture(resample(refPath));
-                const normTest = normalizeGesture(testPath));
+                const normTest = normalizeGesture(testPath);
             
                 // 3. Directional Flow Matching (Cosine Similarity)
                 let totalCosSim = 0;
