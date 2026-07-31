@@ -154,7 +154,6 @@
             RECORDING_PATH: "RECORDING_PATH",
             TEST_P1: "TEST_P1",
             TEST_PATH: "TEST_PATH",
-            TEST_P2: "TEST_P2",
             TERMINATED: "TERMINATED"
         };
 
@@ -262,20 +261,20 @@
                         this.dom.btnPrimary.innerText = "Initialize Calibration Sequence";
                         break;
                     case EngineStates.CALIBRATE_P1:
-                        this.dom.btnPrimary.innerText = "Set Position 1 & Start Path Record";
-                        this.dom.hudTelemetry.innerText = "Position finger at Start Point, then click button.";
+                        this.dom.btnPrimary.innerText = "Set Position 1 & Start Recording";
+                        this.dom.hudTelemetry.innerText = "Position index finger at Start Point, then click button.";
                         break;
                     case EngineStates.RECORDING_PATH:
-                        this.dom.btnPrimary.innerText = "Set Position 2 & Save Path";
-                        this.dom.hudTelemetry.innerText = "Trace motion to Position 2. Click button to finish.";
+                        this.dom.btnPrimary.innerText = "Set Position 2 & Save Trajectory";
+                        this.dom.hudTelemetry.innerText = "Trace motion path to Position 2. Click button when complete.";
                         break;
                     case EngineStates.TEST_P1:
                         this.dom.btnPrimary.style.display = "none";
                         this.dom.btnAbort.style.display = "inline-block";
-                        this.dom.hudTelemetry.innerText = "Move to Position 1 to begin execution.";
+                        this.dom.hudTelemetry.innerText = "Move fingertip to Position 1 target node to launch test.";
                         break;
                     case EngineStates.TEST_PATH:
-                        this.dom.hudTelemetry.innerText = "Follow recorded path towards Position 2...";
+                        this.dom.hudTelemetry.innerText = "Follow orange path to Position 2 target node...";
                         break;
                 }
             }
@@ -290,12 +289,20 @@
                     this.transitionState(EngineStates.CALIBRATE_P1);
                     this.dom.viewport.style.display = "block";
                     await this.initHardwareStream();
-                } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
+                } else if (this.state === EngineStates.CALIBRATE_P1) {
+                    if (this.fingerX === null) {
+                        alert("No finger detected! Ensure your hand is visible in the frame.");
+                        return;
+                    }
                     this.audio.beepCheckpoint();
                     this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
                     this.referencePath = [{ x: this.fingerX, y: this.fingerY }];
                     this.transitionState(EngineStates.RECORDING_PATH);
-                } else if (this.state === EngineStates.RECORDING_PATH && this.fingerX !== null) {
+                } else if (this.state === EngineStates.RECORDING_PATH) {
+                    if (this.fingerX === null) {
+                        alert("No finger detected! Ensure your hand is visible in the frame.");
+                        return;
+                    }
                     this.audio.beepCheckpoint();
                     this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
                     this.referencePath.push({ x: this.fingerX, y: this.fingerY });
@@ -332,9 +339,8 @@
                 }, 200);
             }
 
-            // Path distance algorithm (Resampled Mean Trajectory Distance)
             calculatePathAccuracy(refPath, testPath) {
-                if (!refPath || !testPath || refPath.length < 2 || testPath.length < 2) return 0;
+                if (!refPath || !testPath || refPath.length < 2 || testPath.length < 2) return "0.0";
 
                 const resample = (path, numSamples = 50) => {
                     const resampled = [];
@@ -379,13 +385,12 @@
                 }
                 const avgError = totalError / normRef.length;
 
-                // Score conversion: 0 error -> 100%, >= 0.15 normalized error -> 0%
                 const accuracy = Math.max(0, 100 * (1 - (avgError / 0.15)));
                 return accuracy.toFixed(1);
             }
 
             renderPath(pathPoints, color, width = 3) {
-                if (pathPoints.length < 2) return;
+                if (!pathPoints || pathPoints.length < 2) return;
                 const w = this.dom.canvas.width;
                 const h = this.dom.canvas.height;
 
@@ -396,6 +401,8 @@
                 }
                 this.dom.ctx.strokeStyle = color;
                 this.dom.ctx.lineWidth = width;
+                this.dom.ctx.lineCap = "round";
+                this.dom.ctx.lineJoin = "round";
                 this.dom.ctx.stroke();
             }
 
@@ -424,9 +431,9 @@
                             this.fingerX = indexTip.x;
                             this.fingerY = indexTip.y;
 
-                            // Render Fingertip Marker
+                            // Fingertip Circle
                             this.dom.ctx.beginPath();
-                            this.dom.ctx.arc(this.fingerX * w, this.fingerY * h, 12, 0, 2 * Math.PI);
+                            this.dom.ctx.arc(this.fingerX * w, this.fingerY * h, 10, 0, 2 * Math.PI);
                             this.dom.ctx.fillStyle = "#00ff00";
                             this.dom.ctx.fill();
                             this.dom.ctx.strokeStyle = "#ffffff";
@@ -435,19 +442,21 @@
                         }
                     }
 
-                    // --- CALIBRATION & RECORDING LOGIC ---
+                    // --- RECORDING PATH PIPELINE ---
                     if (this.state === EngineStates.RECORDING_PATH && this.fingerX !== null) {
                         this.referencePath.push({ x: this.fingerX, y: this.fingerY });
                     }
-                    this.renderPath(this.referencePath, "rgba(245, 158, 11, 0.8)", 4);
 
-                    // --- EXECUTION TEST & PATH COMPARISON LOGIC ---
+                    // Render Recorded Path
+                    this.renderPath(this.referencePath, "#f59e0b", 4);
+
+                    // --- TESTING PIPELINE ---
                     if (this.state === EngineStates.TEST_P1) {
                         const p1 = this.savedPositions[0];
                         this.dom.ctx.beginPath();
-                        this.dom.ctx.arc(p1.x * w, p1.y * h, 30, 0, 2 * Math.PI);
+                        this.dom.ctx.arc(p1.x * w, p1.y * h, 28, 0, 2 * Math.PI);
                         this.dom.ctx.strokeStyle = "#ef4444";
-                        this.dom.ctx.lineWidth = 2;
+                        this.dom.ctx.lineWidth = 3;
                         this.dom.ctx.stroke();
 
                         if (this.fingerX !== null) {
@@ -472,9 +481,9 @@
 
                         const p2 = this.savedPositions[1];
                         this.dom.ctx.beginPath();
-                        this.dom.ctx.arc(p2.x * w, p2.y * h, 30, 0, 2 * Math.PI);
+                        this.dom.ctx.arc(p2.x * w, p2.y * h, 28, 0, 2 * Math.PI);
                         this.dom.ctx.strokeStyle = "#ef4444";
-                        this.dom.ctx.lineWidth = 2;
+                        this.dom.ctx.lineWidth = 3;
                         this.dom.ctx.stroke();
 
                         if (this.fingerX !== null) {
@@ -492,10 +501,10 @@
                         }
                     }
 
-                    // Draw end position nodes
+                    // Render start and end nodes
                     this.savedPositions.forEach((pos, idx) => {
                         this.dom.ctx.beginPath();
-                        this.dom.ctx.arc(pos.x * w, pos.y * h, 10, 0, 2 * Math.PI);
+                        this.dom.ctx.arc(pos.x * w, pos.y * h, 8, 0, 2 * Math.PI);
                         this.dom.ctx.fillStyle = idx === 0 ? "#10b981" : "#ef4444";
                         this.dom.ctx.fill();
                     });
@@ -504,7 +513,7 @@
                     if (this.state.startsWith("TEST")) {
                         this.dom.ctx.fillStyle = "#ffffff";
                         this.dom.ctx.font = "16px monospace";
-                        this.dom.ctx.fillText(`Hold Progress: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 30, h - 20);
+                        this.dom.ctx.fillText(`Hold Progress: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 20, h - 20);
                     }
                 }
 
@@ -529,7 +538,7 @@
                     this.dom.analytics.className = "analytics-card success";
                     this.dom.analytics.innerHTML = `
                         <strong>STATUS: TASK SUCCESSFUL</strong><br>
-                        Time Taken: ${duration.toFixed(2)}s<br>
+                        Time Elapsed: ${duration.toFixed(2)}s<br>
                         Path Accuracy Score: <strong>${accuracyScore}%</strong>
                     `;
                 } else {
