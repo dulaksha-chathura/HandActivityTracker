@@ -1,12 +1,12 @@
-# Spatial Task Quality Assurance & Hand Activity Tracker Engine 🎯🖐️
+# Spatial Task Quality Assurance & Hand Activity Tracker Engine 
 
 A real-time, client-side computer vision application designed to map, track, and verify hand spatial movements. Built using **MediaPipe Tasks API**, **JavaScript/HTML5 Canvas**, and **Python OpenCV**, this tool calibrates spatial coordinates to verify precision tasks with dwell-time detection.
 
-🚀 **Live Web Demo:** [https://dulaksha-chathura.github.io/HandActivityTracker/](https://dulaksha-chathura.github.io/HandActivityTracker/)
+ **Live Web Demo:** [https://dulaksha-chathura.github.io/HandActivityTracker/](https://dulaksha-chathura.github.io/HandActivityTracker/)
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 * **Real-time Fingertip Tracking:** Tracks index finger tip (Landmark 8) position with visual UI overlays.
 * **Two-Point Spatial Calibration:** Allows users to set up custom target points (`Position 1` & `Position 2`).
@@ -34,7 +34,7 @@ A real-time, client-side computer vision application designed to map, track, and
 # OPTION 1: WEB VERSION (RECOMMENDED)
 # ------------------------------------------------------------------------------
 # Simply open the live web application in any modern web browser with webcam access:
-# 👉 https://dulaksha-chathura.github.io/HandActivityTracker/
+#  https://dulaksha-chathura.github.io/HandActivityTracker/
 
 # If you downloaded the source files and want to run the web version locally,
 # serve index.html via an HTTP server (due to browser CORS restrictions):
