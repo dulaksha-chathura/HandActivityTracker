@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Spatial Task Quality Assurance Engine</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .dashboard-container {
+            width: 100%;
+            max-width: 700px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 { font-size: 24px; margin-top: 0; font-weight: 700; letter-spacing: -0.025em; text-align: left; border-bottom: 1px solid #334155; padding-bottom: 12px;}
+        p { color: var(--text-muted); font-size: 14px; text-align: left; margin-bottom: 24px; line-height: 1.5; }
+
+        .system-hud {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background: var(--bg-primary);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-family: "Courier New", Courier, monospace;
+            border-left: 4px solid var(--accent-blue);
+        }
+
+        .hud-item { text-align: left; }
+        .hud-label { color: var(--text-muted); font-weight: bold; }
+        .hud-value { color: var(--text-main); }
+
+        .controls { display: flex; justify-content: flex-start; gap: 12px; margin-bottom: 20px; }
+
+        button {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button:disabled { background-color: #334155; color: var(--text-muted); cursor: not-allowed; transform: none; }
+        button.abort { background-color: var(--accent-red); }
+
+        .viewport-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            background: #000;
+            margin-top: 16px;
+        }
+        video { width: 100%; height: auto; transform: scaleX(-1); display: block; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
+
+        .analytics-card {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 8px;
+            display: none;
+            text-align: left;
+            animation: slideIn 0.3s ease-out;
+        }
+        .analytics-card.success { background: #064e3b; border: 1px solid var(--accent-green); }
+        .analytics-card.failed { background: #4c1d1d; border: 1px solid var(--accent-red); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Spatial QA Verification Engine</h1>
+        <p>A decentralized, client-side Computer Vision pipeline designed for operational motion mapping & trajectory path verification loops.</p>
+
+        <div class="system-hud">
+            <div class="hud-item"><span class="hud-label">ENGINE_STATE:</span> <span id="hudState" class="hud-value" style="color:var(--accent-red);">INITIALIZING</span></div>
+            <div class="hud-item"><span class="hud-label">TELEMETRY:</span> <span id="hudTelemetry" class="hud-value">N/A</span></div>
+        </div>
+
+        <div class="controls">
+            <button id="btnPrimary" disabled>Awaiting Framework...</button>
+            <button id="btnAbort" class="abort" style="display: none;">Abort Routine</button>
+        </div>
+
+        <div class="viewport-wrapper" id="viewportWrapper">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="output_canvas"></canvas>
+        </div>
+
+        <div id="analyticsCard" class="analytics-card"></div>
+    </div>
+
+    <script type="module">
+        import {
+            HandLandmarker,
+            FilesetResolver
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+        const video = document.getElementById("webcam");
+        const canvas = document.getElementById("output_canvas");
+        const ctx = canvas.getContext("2d");
+        const btnPrimary = document.getElementById("btnPrimary");
+        const btnAbort = document.getElementById("btnAbort");
+        const videoContainer = document.getElementById("viewportWrapper");
+        const analytics = document.getElementById("analyticsCard");
+
+        const EngineConfig = {
+            THRESHOLD_DISTANCE: 0.08,
+            REQUIRED_HOLD_FRAMES: 15,
+            TIMEOUT_LIMIT_SEC: 60,
+            CAMERA_PROFILES: { width: 640, height: 480, facingMode: "user" },
+            MODEL_ASSET_PATH: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+        };
+
+        const EngineStates = {
+            INITIALIZING: "INITIALIZING",
+            READY: "READY",
+            CALIBRATE_P1: "CALIBRATE_P1",
+            RECORDING_PATH: "RECORDING_PATH",
+            TEST_P1: "TEST_P1",
+            TEST_PATH: "TEST_PATH",
+            TEST_P2: "TEST_P2",
+            TERMINATED: "TERMINATED"
+        };
+
+        class WebAudioEngine {
+            constructor() { this.ctx = null; }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+            playTone(freq, type, duration) {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+            beepSuccess() { this.playTone(880, "sine", 0.15); }
+            beepCheckpoint() { this.playTone(587, "triangle", 0.1); }
+            beepFailure() { this.playTone(220, "sawtooth", 0.4); }
+        }
+
+        class ApplicationContext {
+            constructor() {
+                this.state = EngineStates.INITIALIZING;
+                this.handLandmarker = null;
+                this.savedPositions = [];
+                this.referencePath = [];
+                this.liveTestPath = [];
+                this.holdCounter = 0;
+                this.startTime = 0;
+                this.timerInterval = null;
+                this.streamRef = null;
+                this.fingerX = null;
+                this.fingerY = null;
+                this.lastVideoTime = -1;
+                this.audio = new WebAudioEngine();
+
+                this.dom = {
+                    hudState: document.getElementById("hudState"),
+                    hudTelemetry: document.getElementById("hudTelemetry"),
+                    btnPrimary: btnPrimary,
+                    btnAbort: btnAbort,
+                    viewport: videoContainer,
+                    video: video,
+                    canvas: canvas,
+                    ctx: ctx,
+                    analytics: analytics
+                };
+
+                this.dom.btnPrimary.addEventListener("click", () => this.handlePrimaryAction());
+                this.dom.btnAbort.addEventListener("click", () => this.terminatePipeline(false, "USER_ABORT"));
+            }
+
+            async bootstrap() {
+                if (location.protocol === "file:") {
+                    this.dom.hudState.innerText = "CORS_ERROR";
+                    this.dom.hudTelemetry.innerText = "PLEASE USE HTTP SERVER";
+                    alert("MediaPipe requires an HTTP server (e.g., GitHub Pages or Python http.server).");
+                    return;
+                }
+
+                try {
+                    const vision = await FilesetResolver.forVisionTasks(
+                        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+                    );
+
+                    const options = {
+                        baseOptions: {
+                            modelAssetPath: EngineConfig.MODEL_ASSET_PATH,
+                            delegate: "GPU"
+                        },
+                        runningMode: "VIDEO",
+                        numHands: 1,
+                        minHandDetectionConfidence: 0.7
+                    };
+
+                    try {
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
+                    } catch (gpuErr) {
+                        console.warn("GPU failed, falling back to CPU execution:", gpuErr);
+                        options.baseOptions.delegate = "CPU";
+                        this.handLandmarker = await HandLandmarker.createFromOptions(vision, options);
+                    }
+
+                    this.transitionState(EngineStates.READY);
+                } catch (error) {
+                    this.dom.hudState.innerText = "CRITICAL_ERROR";
+                    this.dom.hudTelemetry.innerText = "BOOTSTRAP_FAILED";
+                    console.error("Bootstrap Fatal Loop: ", error);
+                }
+            }
+
+            transitionState(newState) {
+                this.state = newState;
+                this.dom.hudState.innerText = newState;
+
+                switch (newState) {
+                    case EngineStates.READY:
+                        this.dom.hudState.style.color = "var(--accent-blue)";
+                        this.dom.btnPrimary.disabled = false;
+                        this.dom.btnPrimary.style.display = "inline-block";
+                        this.dom.btnPrimary.innerText = "Initialize Calibration Sequence";
+                        break;
+                    case EngineStates.CALIBRATE_P1:
+                        this.dom.btnPrimary.innerText = "Set Position 1 & Start Path Record";
+                        this.dom.hudTelemetry.innerText = "Position finger at Start Point, then click button.";
+                        break;
+                    case EngineStates.RECORDING_PATH:
+                        this.dom.btnPrimary.innerText = "Set Position 2 & Save Path";
+                        this.dom.hudTelemetry.innerText = "Trace motion to Position 2. Click button to finish.";
+                        break;
+                    case EngineStates.TEST_P1:
+                        this.dom.btnPrimary.style.display = "none";
+                        this.dom.btnAbort.style.display = "inline-block";
+                        this.dom.hudTelemetry.innerText = "Move to Position 1 to begin execution.";
+                        break;
+                    case EngineStates.TEST_PATH:
+                        this.dom.hudTelemetry.innerText = "Follow recorded path towards Position 2...";
+                        break;
+                }
+            }
+
+            async handlePrimaryAction() {
+                this.audio.init();
+                if (this.state === EngineStates.READY) {
+                    this.savedPositions = [];
+                    this.referencePath = [];
+                    this.liveTestPath = [];
+                    this.dom.analytics.style.display = "none";
+                    this.transitionState(EngineStates.CALIBRATE_P1);
+                    this.dom.viewport.style.display = "block";
+                    await this.initHardwareStream();
+                } else if (this.state === EngineStates.CALIBRATE_P1 && this.fingerX !== null) {
+                    this.audio.beepCheckpoint();
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
+                    this.referencePath = [{ x: this.fingerX, y: this.fingerY }];
+                    this.transitionState(EngineStates.RECORDING_PATH);
+                } else if (this.state === EngineStates.RECORDING_PATH && this.fingerX !== null) {
+                    this.audio.beepCheckpoint();
+                    this.savedPositions.push({ x: this.fingerX, y: this.fingerY });
+                    this.referencePath.push({ x: this.fingerX, y: this.fingerY });
+                    
+                    this.holdCounter = 0;
+                    this.startTime = Date.now();
+                    this.transitionState(EngineStates.TEST_P1);
+                    this.startChronoLoop();
+                }
+            }
+
+            async initHardwareStream() {
+                try {
+                    this.streamRef = await navigator.mediaDevices.getUserMedia({ video: EngineConfig.CAMERA_PROFILES });
+                    this.dom.video.srcObject = this.streamRef;
+                    this.dom.video.addEventListener("loadeddata", () => {
+                        window.requestAnimationFrame(() => this.processPipelineFrame());
+                    });
+                } catch (err) {
+                    this.dom.hudTelemetry.innerText = "HARDWARE_ACCESS_DENIED";
+                    this.terminatePipeline(false, "PERMISSIONS_EXCEPTION");
+                }
+            }
+
+            startChronoLoop() {
+                this.timerInterval = setInterval(() => {
+                    const elapsed = (Date.now() - this.startTime) / 1000;
+                    const remaining = Math.max(0, Math.ceil(EngineConfig.TIMEOUT_LIMIT_SEC - elapsed));
+
+                    if (this.state.startsWith("TEST")) {
+                        this.dom.hudTelemetry.innerText = `TIMEOUT IN: ${remaining}s`;
+                    }
+                    if (remaining <= 0) this.terminatePipeline(false, "TIMEOUT_EXCEPTION");
+                }, 200);
+            }
+
+            // Path distance algorithm (Resampled Mean Trajectory Distance)
+            calculatePathAccuracy(refPath, testPath) {
+                if (!refPath || !testPath || refPath.length < 2 || testPath.length < 2) return 0;
+
+                const resample = (path, numSamples = 50) => {
+                    const resampled = [];
+                    const totalLen = path.reduce((acc, pt, i) => {
+                        if (i === 0) return 0;
+                        return acc + Math.hypot(pt.x - path[i-1].x, pt.y - path[i-1].y);
+                    }, 0);
+
+                    if (totalLen === 0) return Array(numSamples).fill(path[0]);
+
+                    const step = totalLen / (numSamples - 1);
+                    let currDist = 0;
+                    let pathIdx = 0;
+
+                    resampled.push(path[0]);
+                    for (let i = 1; i < numSamples - 1; i++) {
+                        const targetDist = i * step;
+                        while (pathIdx < path.length - 1) {
+                            const d = Math.hypot(path[pathIdx+1].x - path[pathIdx].x, path[pathIdx+1].y - path[pathIdx].y);
+                            if (currDist + d >= targetDist) {
+                                const t = (targetDist - currDist) / (d || 1);
+                                resampled.push({
+                                    x: path[pathIdx].x + t * (path[pathIdx+1].x - path[pathIdx].x),
+                                    y: path[pathIdx].y + t * (path[pathIdx+1].y - path[pathIdx].y)
+                                });
+                                break;
+                            }
+                            currDist += d;
+                            pathIdx++;
+                        }
+                    }
+                    resampled.push(path[path.length - 1]);
+                    return resampled;
+                };
+
+                const normRef = resample(refPath);
+                const normTest = resample(testPath);
+
+                let totalError = 0;
+                for (let i = 0; i < normRef.length; i++) {
+                    totalError += Math.hypot(normRef[i].x - normTest[i].x, normRef[i].y - normTest[i].y);
+                }
+                const avgError = totalError / normRef.length;
+
+                // Score conversion: 0 error -> 100%, >= 0.15 normalized error -> 0%
+                const accuracy = Math.max(0, 100 * (1 - (avgError / 0.15)));
+                return accuracy.toFixed(1);
+            }
+
+            renderPath(pathPoints, color, width = 3) {
+                if (pathPoints.length < 2) return;
+                const w = this.dom.canvas.width;
+                const h = this.dom.canvas.height;
+
+                this.dom.ctx.beginPath();
+                this.dom.ctx.moveTo(pathPoints[0].x * w, pathPoints[0].y * h);
+                for (let i = 1; i < pathPoints.length; i++) {
+                    this.dom.ctx.lineTo(pathPoints[i].x * w, pathPoints[i].y * h);
+                }
+                this.dom.ctx.strokeStyle = color;
+                this.dom.ctx.lineWidth = width;
+                this.dom.ctx.stroke();
+            }
+
+            processPipelineFrame() {
+                if (this.state === EngineStates.READY) return;
+
+                if (this.dom.video.readyState >= 2 && this.dom.video.currentTime !== this.lastVideoTime) {
+                    this.lastVideoTime = this.dom.video.currentTime;
+
+                    this.dom.canvas.width = this.dom.video.videoWidth;
+                    this.dom.canvas.height = this.dom.video.videoHeight;
+                    const w = this.dom.canvas.width;
+                    const h = this.dom.canvas.height;
+                    this.dom.ctx.clearRect(0, 0, w, h);
+
+                    const timestamp = performance.now();
+                    const detections = this.handLandmarker.detectForVideo(this.dom.video, timestamp);
+                    
+                    this.fingerX = null;
+                    this.fingerY = null;
+
+                    if (detections && detections.landmarks && detections.landmarks.length > 0) {
+                        const firstHand = detections.landmarks[0];
+                        if (firstHand && firstHand.length > 8) {
+                            const indexTip = firstHand[8];
+                            this.fingerX = indexTip.x;
+                            this.fingerY = indexTip.y;
+
+                            // Render Fingertip Marker
+                            this.dom.ctx.beginPath();
+                            this.dom.ctx.arc(this.fingerX * w, this.fingerY * h, 12, 0, 2 * Math.PI);
+                            this.dom.ctx.fillStyle = "#00ff00";
+                            this.dom.ctx.fill();
+                            this.dom.ctx.strokeStyle = "#ffffff";
+                            this.dom.ctx.lineWidth = 2;
+                            this.dom.ctx.stroke();
+                        }
+                    }
+
+                    // --- CALIBRATION & RECORDING LOGIC ---
+                    if (this.state === EngineStates.RECORDING_PATH && this.fingerX !== null) {
+                        this.referencePath.push({ x: this.fingerX, y: this.fingerY });
+                    }
+                    this.renderPath(this.referencePath, "rgba(245, 158, 11, 0.8)", 4);
+
+                    // --- EXECUTION TEST & PATH COMPARISON LOGIC ---
+                    if (this.state === EngineStates.TEST_P1) {
+                        const p1 = this.savedPositions[0];
+                        this.dom.ctx.beginPath();
+                        this.dom.ctx.arc(p1.x * w, p1.y * h, 30, 0, 2 * Math.PI);
+                        this.dom.ctx.strokeStyle = "#ef4444";
+                        this.dom.ctx.lineWidth = 2;
+                        this.dom.ctx.stroke();
+
+                        if (this.fingerX !== null) {
+                            const dist = Math.hypot(this.fingerX - p1.x, this.fingerY - p1.y);
+                            if (dist < EngineConfig.THRESHOLD_DISTANCE) {
+                                this.holdCounter++;
+                                if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
+                                    this.audio.beepCheckpoint();
+                                    this.holdCounter = 0;
+                                    this.liveTestPath = [{ x: this.fingerX, y: this.fingerY }];
+                                    this.transitionState(EngineStates.TEST_PATH);
+                                }
+                            } else {
+                                this.holdCounter = Math.max(0, this.holdCounter - 1);
+                            }
+                        }
+                    } else if (this.state === EngineStates.TEST_PATH) {
+                        if (this.fingerX !== null) {
+                            this.liveTestPath.push({ x: this.fingerX, y: this.fingerY });
+                        }
+                        this.renderPath(this.liveTestPath, "#3b82f6", 3);
+
+                        const p2 = this.savedPositions[1];
+                        this.dom.ctx.beginPath();
+                        this.dom.ctx.arc(p2.x * w, p2.y * h, 30, 0, 2 * Math.PI);
+                        this.dom.ctx.strokeStyle = "#ef4444";
+                        this.dom.ctx.lineWidth = 2;
+                        this.dom.ctx.stroke();
+
+                        if (this.fingerX !== null) {
+                            const dist = Math.hypot(this.fingerX - p2.x, this.fingerY - p2.y);
+                            if (dist < EngineConfig.THRESHOLD_DISTANCE) {
+                                this.holdCounter++;
+                                if (this.holdCounter >= EngineConfig.REQUIRED_HOLD_FRAMES) {
+                                    const accuracy = this.calculatePathAccuracy(this.referencePath, this.liveTestPath);
+                                    this.terminatePipeline(true, "SUCCESS_MET", accuracy);
+                                    return;
+                                }
+                            } else {
+                                this.holdCounter = Math.max(0, this.holdCounter - 1);
+                            }
+                        }
+                    }
+
+                    // Draw end position nodes
+                    this.savedPositions.forEach((pos, idx) => {
+                        this.dom.ctx.beginPath();
+                        this.dom.ctx.arc(pos.x * w, pos.y * h, 10, 0, 2 * Math.PI);
+                        this.dom.ctx.fillStyle = idx === 0 ? "#10b981" : "#ef4444";
+                        this.dom.ctx.fill();
+                    });
+
+                    // HUD Info Overlay
+                    if (this.state.startsWith("TEST")) {
+                        this.dom.ctx.fillStyle = "#ffffff";
+                        this.dom.ctx.font = "16px monospace";
+                        this.dom.ctx.fillText(`Hold Progress: ${this.holdCounter}/${EngineConfig.REQUIRED_HOLD_FRAMES}`, 30, h - 20);
+                    }
+                }
+
+                window.requestAnimationFrame(() => this.processPipelineFrame());
+            }
+
+            terminatePipeline(isSuccess, terminationStatusSymbol, accuracyScore = null) {
+                clearInterval(this.timerInterval);
+                if (this.streamRef) this.streamRef.getTracks().forEach(track => track.stop());
+
+                this.dom.viewport.style.display = "none";
+                this.dom.btnAbort.style.display = "none";
+                this.dom.btnPrimary.style.display = "inline-block";
+
+                this.transitionState(EngineStates.READY);
+                this.dom.hudTelemetry.innerText = terminationStatusSymbol;
+                this.dom.analytics.style.display = "block";
+
+                if (isSuccess) {
+                    this.audio.beepSuccess();
+                    const duration = (Date.now() - this.startTime) / 1000;
+                    this.dom.analytics.className = "analytics-card success";
+                    this.dom.analytics.innerHTML = `
+                        <strong>STATUS: TASK SUCCESSFUL</strong><br>
+                        Time Taken: ${duration.toFixed(2)}s<br>
+                        Path Accuracy Score: <strong>${accuracyScore}%</strong>
+                    `;
+                } else {
+                    this.audio.beepFailure();
+                    this.dom.analytics.className = "analytics-card failed";
+                    this.dom.analytics.innerHTML = `<strong>STATUS: TASK FAILED</strong><br>Reason: ${terminationStatusSymbol}`;
+                }
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const context = new ApplicationContext();
+            context.bootstrap();
+        });
+    </script>
+</body>
+</html>
